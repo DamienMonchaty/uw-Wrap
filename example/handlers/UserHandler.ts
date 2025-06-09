@@ -1,12 +1,48 @@
-import { BaseHandler } from '../../src/core/BaseHandler';
-import { UWebSocketWrapper } from '../../src/core/uWebSocketWrapper';
+import { Route, GET, POST, PUT, DELETE, Auth, Validate } from '../../src/core/route-decorators';
+import { BaseHandler } from '../../src/core/http-handler';
+import { UWebSocketWrapper } from '../../src/core/server-wrapper';
 import { Logger } from '../../src/utils/logger';
 import { ErrorHandler } from '../../src/utils/errorHandler';
 import { UserServiceImpl } from '../services/UserService';
 
+// Validation schemas
+export const CreateUserSchema = {
+    type: 'object',
+    required: ['username', 'email', 'name'],
+    properties: {
+        username: { type: 'string', minLength: 3, maxLength: 50 },
+        email: { type: 'string', format: 'email' },
+        name: { type: 'string', minLength: 1, maxLength: 100 },
+        password: { type: 'string', minLength: 6 },
+        role: { type: 'string', enum: ['user', 'admin', 'moderator'] }
+    }
+};
+
+export const UpdateUserSchema = {
+    type: 'object',
+    properties: {
+        username: { type: 'string', minLength: 3, maxLength: 50 },
+        email: { type: 'string', format: 'email' },
+        name: { type: 'string', minLength: 1, maxLength: 100 },
+        role: { type: 'string', enum: ['user', 'admin', 'moderator'] }
+    }
+};
+
+export const BatchUsersSchema = {
+    type: 'object',
+    required: ['users'],
+    properties: {
+        users: {
+            type: 'array',
+            items: CreateUserSchema
+        }
+    }
+};
+
 /**
- * User management handler
+ * User management handler using modern decorator system
  */
+@Route('/users')
 export class UserHandler extends BaseHandler {
     private userService: UserServiceImpl;
 
@@ -20,64 +56,14 @@ export class UserHandler extends BaseHandler {
         this.userService = userService;
     }
 
-    registerRoutes(): void {
-        // Basic CRUD operations
-        this.server.addHttpHandler('post', '/users', (req, res) => 
-            this.handleAsync(req, res, this.createUser.bind(this), 'Create User')
-        );
-
-        this.server.addHttpHandler('get', '/users', (req, res) => 
-            this.handleAsync(req, res, this.getAllUsers.bind(this), 'Get All Users')
-        );
-
-        this.server.addHttpHandler('get', '/users/:id', (req, res) => 
-            this.handleAsync(req, res, this.getUserById.bind(this), 'Get User By ID')
-        );
-
-        this.server.addHttpHandler('put', '/users/:id', (req, res) => 
-            this.handleAsync(req, res, this.updateUser.bind(this), 'Update User')
-        );
-
-        this.server.addHttpHandler('delete', '/users/:id', (req, res) => 
-            this.handleAsync(req, res, this.deleteUser.bind(this), 'Delete User')
-        );
-
-        // Advanced operations
-        this.server.addHttpHandler('post', '/users/batch', (req, res) => 
-            this.handleAsync(req, res, this.createBatchUsers.bind(this), 'Batch Create Users')
-        );
-
-        this.server.addHttpHandler('get', '/users/by-role/:role', (req, res) => 
-            this.handleAsync(req, res, this.getUsersByRole.bind(this), 'Get Users By Role')
-        );
-
-        // Statistics and management
-        this.server.addHttpHandler('get', '/api/v1/users/stats', (req, res) => 
-            this.handleAsync(req, res, this.getUserStats.bind(this), 'Get User Stats')
-        );
-
-        this.server.addHttpHandler('post', '/api/v1/users/:id/promote', (req, res) => 
-            this.handleAsync(req, res, this.promoteUser.bind(this), 'Promote User')
-        );
-
-        this.server.addHttpHandler('post', '/api/v1/users/:id/demote', (req, res) => 
-            this.handleAsync(req, res, this.demoteUser.bind(this), 'Demote User')
-        );
-    }
-
     /**
      * Create a new user
      */
-    private async createUser(req: any, res: any): Promise<void> {
-        const userData = await this.parseJsonBody(res);
-        
-        // Validate required fields using new validation method
-        this.validateRequiredFields(userData, ['username', 'email', 'name']);
-        
-        // Additional business validation
-        if (userData.email && !this.isValidEmail(userData.email)) {
-            this.createValidationError('Invalid email format', 'email', userData.email);
-        }
+    @POST('/')
+    @Validate(CreateUserSchema)
+    @Auth(['admin', 'moderator'])
+    async createUser(req: any, res: any) {
+        const userData = this.getRequestBody(req, res);
         
         const user = await this.userService.createUser({
             username: userData.username,
@@ -85,171 +71,233 @@ export class UserHandler extends BaseHandler {
             name: userData.name
         });
         
-        this.sendSuccess(res, { 
-            userId: user.id,
-            user
-        }, 'User created successfully');
-    }
-
-    /**
-     * Validate email format
-     */
-    private isValidEmail(email: string): boolean {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return emailRegex.test(email);
+        this.logger.info(`User created successfully: ${user.id}`);
+        
+        return { 
+            success: true,
+            data: {
+                userId: user.id,
+                user
+            },
+            message: 'User created successfully'
+        };
     }
 
     /**
      * Get all users
      */
-    private async getAllUsers(req: any, res: any): Promise<void> {
+    @GET('/')
+    @Auth()
+    async getAllUsers(req: any, res: any) {
         const users = await this.userService.getAllUsers();
-        this.sendSuccess(res, { users });
+        
+        this.logger.info(`Retrieved ${users.length} users`);
+        
+        return {
+            success: true,
+            data: { users },
+            total: users.length
+        };
     }
 
     /**
      * Get user by ID
      */
-    private async getUserById(req: any, res: any): Promise<void> {
-        const userId = req.getParameter(0);
+    @GET('/:id')
+    @Auth()
+    async getUserById(req: any, res: any) {
+        const { id } = this.getPathParams(req);
         
-        // Validate input using new error methods
-        if (!userId) {
-            this.createValidationError('User ID is required', 'userId');
+        if (!id) {
+            this.createValidationError('User ID is required', 'id');
         }
 
-        const user = await this.userService.getUserById(parseInt(userId));
+        const user = await this.userService.getUserById(parseInt(id));
         
         if (!user) {
-            this.createNotFoundError('User', userId);
+            this.createNotFoundError('User', id);
         }
 
-        this.sendSuccess(res, { user });
+        this.logger.info(`Retrieved user: ${id}`);
+        
+        return {
+            success: true,
+            data: { user }
+        };
     }
 
     /**
      * Update user
      */
-    private async updateUser(req: any, res: any): Promise<void> {
-        const userId = req.getParameter(0);
+    @PUT('/:id')
+    @Validate(UpdateUserSchema)
+    @Auth(['admin', 'moderator'])
+    async updateUser(req: any, res: any) {
+        const { id } = this.getPathParams(req);
         
-        if (!userId) {
-            this.sendError(res, 'User ID is required');
-            return;
+        if (!id) {
+            this.createValidationError('User ID is required', 'id');
         }
 
-        const updateData = await this.parseJsonBody(res);
-        const user = await this.userService.updateUser(parseInt(userId), updateData);
+        const updateData = this.getRequestBody(req, res);
+        const user = await this.userService.updateUser(parseInt(id), updateData);
         
         if (!user) {
-            this.sendError(res, 'User not found', 404);
-            return;
+            this.createNotFoundError('User', id);
         }
 
-        this.sendSuccess(res, { user }, 'User updated successfully');
+        this.logger.info(`User updated successfully: ${id}`);
+        
+        return {
+            success: true,
+            data: { user },
+            message: 'User updated successfully'
+        };
     }
 
     /**
      * Delete user
      */
-    private async deleteUser(req: any, res: any): Promise<void> {
-        const userId = req.getParameter(0);
+    @DELETE('/:id')
+    @Auth(['admin'])
+    async deleteUser(req: any, res: any) {
+        const { id } = this.getPathParams(req);
         
-        if (!userId) {
-            this.sendError(res, 'User ID is required');
-            return;
+        if (!id) {
+            this.createValidationError('User ID is required', 'id');
         }
 
-        const deleted = await this.userService.deleteUser(parseInt(userId));
+        const deleted = await this.userService.deleteUser(parseInt(id));
         
         if (!deleted) {
-            this.sendError(res, 'User not found', 404);
-            return;
+            this.createNotFoundError('User', id);
         }
 
-        this.sendSuccess(res, {}, 'User deleted successfully');
+        this.logger.info(`User deleted successfully: ${id}`);
+        
+        return {
+            success: true,
+            message: 'User deleted successfully'
+        };
     }
 
     /**
      * Create multiple users
      */
-    private async createBatchUsers(req: any, res: any): Promise<void> {
-        const { users } = await this.parseJsonBody(res);
+    @POST('/batch')
+    @Validate(BatchUsersSchema)
+    @Auth(['admin'])
+    async createBatchUsers(req: any, res: any) {
+        const { users } = this.getRequestBody(req, res);
         
-        if (!users || !Array.isArray(users)) {
-            this.sendError(res, 'Users array is required');
-            return;
-        }
-
         const result = await this.userService.createMultipleUsers(users);
         
-        this.sendSuccess(res, { 
-            users: result 
-        }, `${result.length} users created successfully`);
+        this.logger.info(`Created ${result.length} users in batch`);
+        
+        return {
+            success: true,
+            data: { users: result },
+            message: `${result.length} users created successfully`
+        };
     }
 
     /**
      * Get users by role
      */
-    private async getUsersByRole(req: any, res: any): Promise<void> {
-        const role = req.getParameter(0);
+    @GET('/by-role/:role')
+    @Auth(['admin', 'moderator'])
+    async getUsersByRole(req: any, res: any) {
+        const { role } = this.getPathParams(req);
         
         if (!role) {
-            this.sendError(res, 'Role is required');
-            return;
+            this.createValidationError('Role is required', 'role');
         }
 
         const users = await this.userService.getUsersByRole(role);
-        this.sendSuccess(res, { users, role });
+        
+        this.logger.info(`Retrieved ${users.length} users with role: ${role}`);
+        
+        return {
+            success: true,
+            data: { users, role },
+            total: users.length
+        };
     }
 
     /**
      * Get user statistics
      */
-    private async getUserStats(req: any, res: any): Promise<void> {
+    @GET('/stats')
+    @Auth(['admin'])
+    async getUserStats(req: any, res: any) {
         const stats = await this.userService.getUserStats();
-        this.sendSuccess(res, { stats });
+        
+        this.logger.info('Retrieved user statistics');
+        
+        return {
+            success: true,
+            data: { stats }
+        };
     }
 
     /**
      * Promote user to admin
      */
-    private async promoteUser(req: any, res: any): Promise<void> {
-        const userId = req.getParameter(0);
+    @POST('/:id/promote')
+    @Auth(['admin'])
+    async promoteUser(req: any, res: any) {
+        const { id } = this.getPathParams(req);
         
-        if (!userId) {
-            this.sendError(res, 'User ID is required');
-            return;
+        if (!id) {
+            this.createValidationError('User ID is required', 'id');
         }
 
-        const user = await this.userService.promoteUserToAdmin(parseInt(userId));
+        const user = await this.userService.promoteUserToAdmin(parseInt(id));
         
         if (!user) {
-            this.sendError(res, 'User not found', 404);
-            return;
+            this.createNotFoundError('User', id);
         }
 
-        this.sendSuccess(res, { user }, 'User promoted to admin successfully');
+        this.logger.info(`User promoted to admin: ${id}`);
+        
+        return {
+            success: true,
+            data: { user },
+            message: 'User promoted to admin successfully'
+        };
     }
 
     /**
      * Demote user from admin
      */
-    private async demoteUser(req: any, res: any): Promise<void> {
-        const userId = req.getParameter(0);
+    @POST('/:id/demote')
+    @Auth(['admin'])
+    async demoteUser(req: any, res: any) {
+        const { id } = this.getPathParams(req);
         
-        if (!userId) {
-            this.sendError(res, 'User ID is required');
-            return;
+        if (!id) {
+            this.createValidationError('User ID is required', 'id');
         }
 
-        const user = await this.userService.demoteUserFromAdmin(parseInt(userId));
+        const user = await this.userService.demoteUserFromAdmin(parseInt(id));
         
         if (!user) {
-            this.sendError(res, 'User not found', 404);
-            return;
+            this.createNotFoundError('User', id);
         }
 
-        this.sendSuccess(res, { user }, 'User demoted from admin successfully');
+        this.logger.info(`User demoted from admin: ${id}`);
+        
+        return {
+            success: true,
+            data: { user },
+            message: 'User demoted from admin successfully'
+        };
+    }
+
+    /**
+     * Legacy method - routes are now automatically registered via decorators
+     */
+    registerRoutes(): void {
+        this.logger.info('UserHandler routes are automatically registered via decorators');
     }
 }

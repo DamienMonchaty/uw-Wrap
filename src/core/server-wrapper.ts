@@ -169,27 +169,47 @@ export class UWebSocketWrapper {
 
     // Helper method to send JSON responses
     sendJSON(res: uWS.HttpResponse, data: any, statusCode: number = 200): void {
-        res.cork(() => {
-            res.writeStatus(`${statusCode}`);
-            res.writeHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify(data));
-        });
+        // Check if response is still valid before sending
+        if (res.aborted) {
+            return; // Don't try to send if response is aborted
+        }
+        
+        try {
+            res.cork(() => {
+                if (!res.aborted) {
+                    res.writeStatus(`${statusCode}`);
+                    res.writeHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify(data));
+                }
+            });
+        } catch (error) {
+            // Log the error but don't throw - response might be closed
+            this.logger.warn('Failed to send JSON response:', { error: (error as Error).message, statusCode });
+        }
     }
 
     // Helper method to read request body
     readBody(res: uWS.HttpResponse): Promise<string> {
         return new Promise((resolve, reject) => {
             let buffer = '';
+            let aborted = false;
+            
+            res.onAborted(() => {
+                aborted = true;
+                reject(new Error('Request aborted'));
+            });
             
             res.onData((chunk, isLast) => {
-                buffer += Buffer.from(chunk).toString();
-                if (isLast) {
-                    resolve(buffer);
+                if (aborted) return;
+                
+                try {
+                    buffer += Buffer.from(chunk).toString();
+                    if (isLast) {
+                        resolve(buffer);
+                    }
+                } catch (error) {
+                    reject(new Error('Failed to read request body: ' + (error as Error).message));
                 }
-            });
-
-            res.onAborted(() => {
-                reject(new Error('Request aborted'));
             });
         });
     }

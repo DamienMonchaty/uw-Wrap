@@ -1,4 +1,4 @@
-import { UWebSocketWrapper } from '../core/uWebSocketWrapper';
+import { UWebSocketWrapper } from '../core/server-wrapper';
 import { ErrorHandler, AppError, ErrorSeverity } from '../utils/errorHandler';
 import { Logger } from '../utils/logger';
 

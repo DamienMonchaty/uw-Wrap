@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "ts-node example/server.ts",
+    "start:modern": "ts-node example/modern-server.ts",
     "start:bun": "bun run example/server.ts",
+    "start:modern:bun": "bun run example/modern-server.ts",
     "dev": "scripts\\dev.bat",
     "dev:unix": "./scripts/dev.sh",
     "build": "tsc",
@@ -25,6 +27,7 @@
     "dotenv": "^16.5.0",
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.14.1",
+    "reflect-metadata": "^0.2.2",
     "sqlite3": "^5.1.7",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
     "uws": "^200.0.0"

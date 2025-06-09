@@ -4,16 +4,18 @@ import { AppError, ErrorCode, ErrorDetails } from '../utils/errorHandler';
 
 export class JWTManager {
     private secretKey: string;
-    private expiresIn: number;
+    private expiresIn: string | number;
 
-    constructor(secretKey: string, expiresIn: number = 24) {
+    constructor(secretKey: string, expiresIn: string | number = '24h') {
         this.secretKey = secretKey;
         this.expiresIn = expiresIn;
     }
 
     generateToken(payload: JWTPayload): string {
         try {
-            return jwt.sign(payload, this.secretKey, { expiresIn: this.expiresIn });
+            // Cast to any to handle jsonwebtoken type issues
+            const options: any = { expiresIn: this.expiresIn };
+            return jwt.sign(payload, this.secretKey, options);
         } catch (error) {
             const details: ErrorDetails = {
                 operation: 'generateToken',

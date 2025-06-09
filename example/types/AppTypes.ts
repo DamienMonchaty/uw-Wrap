@@ -4,12 +4,12 @@
  */
 
 // Import base types from the wrapper
-import { TYPES as BASE_TYPES } from '../../src/core/Container';
+import { TYPES as BASE_TYPES } from '../../src/core/ioc-container';
 
 /**
  * Extended service identifiers for this application
  */
-export const APP_TYPES = {
+export const TYPES = {
     // Include all base types
     ...BASE_TYPES,
     
@@ -17,6 +17,3 @@ export const APP_TYPES = {
     AppRepositoryManager: Symbol.for('AppRepositoryManager'),
     UserService: Symbol.for('UserService'),
 } as const;
-
-// Re-export for convenience
-export { APP_TYPES as TYPES };

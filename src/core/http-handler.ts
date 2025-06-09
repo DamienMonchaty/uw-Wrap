@@ -1,6 +1,7 @@
-import { UWebSocketWrapper } from './uWebSocketWrapper';
+import { UWebSocketWrapper } from './server-wrapper';
 import { Logger } from '../utils/logger';
 import { ErrorHandler } from '../utils/errorHandler';
+import { HttpRequest, HttpResponse, EnhancedHttpRequest } from '../types/uws-types';
 
 /**
  * Base handler class with common functionality for route handling
@@ -57,9 +58,43 @@ export abstract class BaseHandler {
     }
 
     /**
-     * Parse JSON body safely with error handling
+     * Get parsed JSON body from request (if available from Enhanced Router)
+     * Falls back to manual parsing if not available
+     */
+    protected getRequestBody(req: HttpRequest | EnhancedHttpRequest, res?: HttpResponse): any {
+        // Check if Enhanced Router has already parsed the body
+        if ((req as EnhancedHttpRequest).body !== undefined) {
+            return (req as EnhancedHttpRequest).body;
+        }
+        
+        // Return empty object if no body available to prevent destructuring errors
+        return {};
+    }
+
+    /**
+     * Get parsed JSON body with async fallback
+     */
+    protected async getRequestBodyAsync(req: HttpRequest | EnhancedHttpRequest, res: HttpResponse): Promise<any> {
+        // Check if Enhanced Router has already parsed the body
+        if ((req as EnhancedHttpRequest).body !== undefined) {
+            return (req as EnhancedHttpRequest).body;
+        }
+        
+        // Fall back to manual parsing
+        return this.parseJsonBodyManual(res);
+    }
+
+    /**
+     * Parse JSON body safely with error handling (legacy method)
      */
     protected async parseJsonBody(res: any): Promise<any> {
+        return this.parseJsonBodyManual(res);
+    }
+
+    /**
+     * Manual JSON body parsing (for cases where Enhanced Router didn't parse it)
+     */
+    private async parseJsonBodyManual(res: any): Promise<any> {
         try {
             const body = await this.server.readBody(res);
             return JSON.parse(body);
@@ -71,7 +106,7 @@ export abstract class BaseHandler {
     /**
      * Send success response with consistent format
      */
-    protected sendSuccess(res: any, data: any, message?: string): void {
+    protected sendSuccess(res: HttpResponse, data: any, message?: string): void {
         const response = message ? { message, ...data } : data;
         this.server.sendJSON(res, response);
     }
@@ -79,32 +114,47 @@ export abstract class BaseHandler {
     /**
      * Send error response with consistent format
      */
-    protected sendError(res: any, message: string, statusCode: number = 400): void {
+    protected sendError(res: HttpResponse, message: string, statusCode: number = 400): void {
         this.server.sendJSON(res, { error: message }, statusCode);
     }
 
     /**
      * Extract query parameters from request
      */
-    protected getQueryParams(req: any): Record<string, string> {
-        const query = req.getQuery();
-        const params: Record<string, string> = {};
-        
-        if (query) {
-            const searchParams = new URLSearchParams(query);
-            for (const [key, value] of searchParams.entries()) {
-                params[key] = value;
+    protected getQueryParams(req: HttpRequest | EnhancedHttpRequest): Record<string, string> {
+        try {
+            const query = req.getQuery();
+            const params: Record<string, string> = {};
+            
+            if (query) {
+                const searchParams = new URLSearchParams(query);
+                for (const [key, value] of searchParams.entries()) {
+                    params[key] = value;
+                }
             }
+            
+            return params;
+        } catch (error) {
+            return {};
         }
-        
-        return params;
     }
 
     /**
      * Extract path parameters from request
      */
-    protected getPathParams(req: any): Record<string, string> {
-        return req.getParameters ? req.getParameters() : {};
+    protected getPathParams(req: HttpRequest | EnhancedHttpRequest): Record<string, string> {
+        try {
+            // Check if Enhanced Router has already parsed the params
+            if ((req as EnhancedHttpRequest).params !== undefined) {
+                return (req as EnhancedHttpRequest).params || {};
+            }
+            
+            // For uWS, parameters are accessed by index, not as an object
+            // This would need to be implemented by the router that knows the route pattern
+            return {};
+        } catch (error) {
+            return {};
+        }
     }
 
     /**

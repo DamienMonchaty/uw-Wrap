@@ -1,5 +1,5 @@
 // ============================================================================
-// SERVER BOOTSTRAP - Main application entry point
+// SERVER BOOTSTRAP - Main application entry point with Enhanced Router
 // ============================================================================
 
 import 'dotenv/config';
@@ -7,12 +7,10 @@ import 'dotenv/config';
 // ============================================================================
 // CORE INFRASTRUCTURE IMPORTS
 // ============================================================================
-import { UWebSocketWrapper } from '../src/core/uWebSocketWrapper';
-import { Container } from '../src/core/Container';
+import { Container } from '../src/core/ioc-container';
 import { Logger } from '../src/utils/logger';
 import { ErrorHandler } from '../src/utils/errorHandler';
 import { ErrorMiddleware } from '../src/middleware/errorMiddleware';
-import { JWTManager } from '../src/auth/jwtManager';
 import { DatabaseProvider } from '../src/database/interfaces/DatabaseProvider';
 
 // ============================================================================
@@ -20,96 +18,41 @@ import { DatabaseProvider } from '../src/database/interfaces/DatabaseProvider';
 // ============================================================================
 import { ServiceRegistry, createConfigFromEnv, AppConfig } from './core/ServiceRegistry';
 import { TYPES } from './types/AppTypes';
-import { UserServiceImpl } from './services/UserService';
-import { AppRepositoryManager } from './database/AppRepositoryManager';
-
-// ============================================================================
-// ROUTE HANDLERS
-// ============================================================================
-import { AuthHandler } from './handlers/AuthHandler';
-import { UserHandler } from './handlers/UserHandler';
-import { SystemHandler } from './handlers/SystemHandler';
 
 // ============================================================================
 // APPLICATION BOOTSTRAP
 // ============================================================================
 
 /**
- * Initialize IoC Container and register all services
+ * Initialize IoC Container and Enhanced Router
  */
-function initializeContainer() {
+async function initializeApplication() {
     const config = createConfigFromEnv();
     const container = new Container();
     const serviceRegistry = new ServiceRegistry(config, container);
     
-    // Register all services in the IoC container
-    serviceRegistry.registerServices();
+    // Setup all services and enhanced router
+    const { router } = await serviceRegistry.setupApplication();
     
-    return { config, container };
+    return { config, container, serviceRegistry, router };
 }
-
-/**
- * Resolve core services from IoC container
- */
-function resolveServices(container: Container) {
-    return {
-        logger: container.resolve<Logger>(TYPES.Logger),
-        errorHandler: container.resolve<ErrorHandler>(TYPES.ErrorHandler),
-        jwtManager: container.resolve<JWTManager>(TYPES.JWTManager),
-        userService: container.resolve<UserServiceImpl>(TYPES.UserService),
-    };
-}
-
-// Initialize application
-const { config, container } = initializeContainer();
-const { logger, errorHandler, jwtManager, userService } = resolveServices(container);
-
-// Create main server instance
-const server = new UWebSocketWrapper(config.port, logger, errorHandler, jwtManager);
-
-// Setup global error handling
-const errorMiddleware = new ErrorMiddleware(errorHandler, logger);
-errorMiddleware.setupGlobalErrorHandlers();
-
-// ============================================================================
-// INITIALIZATION FUNCTIONS
-// ============================================================================
 
 /**
  * Initialize database connection
  * @throws {Error} If database connection fails
  */
-async function initializeDatabase(): Promise<void> {
+async function initializeDatabase(container: Container): Promise<void> {
     try {
         const dbProvider = container.resolve<DatabaseProvider>(TYPES.DatabaseProvider);
         await dbProvider.connect();
+        
+        const logger = container.resolve<Logger>(TYPES.Logger);
         logger.info('✅ Database connection initialized successfully');
     } catch (error) {
+        const logger = container.resolve<Logger>(TYPES.Logger);
         logger.error('❌ Failed to initialize database connection:', error);
         throw error;
     }
-}
-
-/**
- * Initialize and register all route handlers
- */
-function initializeHandlers(): void {
-    logger.info('🛣️  Initializing route handlers...');
-    
-    // Create handler instances with dependencies
-    const systemHandler = new SystemHandler(server, logger, errorHandler);
-    const authHandler = new AuthHandler(server, logger, errorHandler, jwtManager);
-    const userHandler = new UserHandler(server, logger, errorHandler, userService);
-
-    // Register all routes
-    systemHandler.registerRoutes();   // Health, info, WebSocket
-    authHandler.registerRoutes();     // Authentication endpoints
-    userHandler.registerRoutes();     // User management endpoints
-    
-    // Setup error monitoring routes
-    errorMiddleware.setupErrorMonitoringRoutes(server);
-
-    logger.info('✅ All handlers registered successfully');
 }
 
 // ============================================================================
@@ -117,45 +60,32 @@ function initializeHandlers(): void {
 // ============================================================================
 
 /**
- * Start server with all initialization steps
+ * Start server with Enhanced Router and decorators
  * @throws {Error} If any initialization step fails
  */
 async function startServer(): Promise<void> {
     try {
+        console.log('🚀 Starting server with Enhanced Router...');
+        
+        // Step 1: Initialize application (services, container, router)
+        const { config, container, serviceRegistry } = await initializeApplication();
+        const logger = container.resolve<Logger>(TYPES.Logger);
+        
         logger.info('🚀 Starting server initialization...');
         
-        // Step 1: Initialize database connection
-        await initializeDatabase();
+        // Step 2: Initialize database connection
+        await initializeDatabase(container);
         
-        // Step 2: Initialize all route handlers
-        initializeHandlers();
+        // Step 3: Start the server using ServiceRegistry
+        await serviceRegistry.startServer();
         
-        // Step 3: Start web server
-        await server.start();
-        logger.info('🎉 Server started successfully');
+        logger.info('🎉 Server started successfully with Enhanced Router');
         
     } catch (error) {
-        logger.error('💥 Failed to start server', { error });
+        console.error('💥 Failed to start server:', error);
         process.exit(1);
     }
 }
-
-// ============================================================================
-// EXPORTS FOR EXTERNAL USE
-// ============================================================================
-export { 
-    // Core infrastructure
-    UWebSocketWrapper, 
-    Logger, 
-    ErrorHandler, 
-    JWTManager, 
-    AppRepositoryManager,
-    
-    // Route handlers
-    AuthHandler,
-    UserHandler,
-    SystemHandler
-};
 
 // ============================================================================
 // APPLICATION ENTRY POINT
