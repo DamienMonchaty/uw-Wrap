@@ -4,18 +4,18 @@ Complete documentation for the TypeScript wrapper for uWebSockets.js
 
 ## 📋 Table of Contents
 
-### 🚀 [Setup & Configuration](./docs/setup/)
-- **[MySQL Configuration](./docs/setup/MYSQL_CONFIG.md)** - Complete MySQL setup and configuration guide
+### 🚀 [Setup & Configuration](./setup/)
+- **[MySQL Configuration](./setup/MYSQL_CONFIG.md)** - Complete MySQL setup and configuration guide
 
-### 📖 [Usage Guides](./docs/guides/)
-- **[Wrapper Usage Guide](./docs/guides/WRAPPER_USAGE_GUIDE.md)** - Comprehensive guide for using the wrapper
-- **[Repository Guide](./docs/guides/REPOSITORY_GUIDE.md)** - Repository pattern implementation and API reference
+### 📖 [Usage Guides](./guides/)
+- **[Wrapper Usage Guide](./guides/WRAPPER_USAGE_GUIDE.md)** - Comprehensive guide for using the wrapper
+- **[Repository Guide](./guides/REPOSITORY_GUIDE.md)** - Repository pattern implementation and API reference
 
-### 🏗️ [Architecture](./docs/architecture/)
-- **[Error Handler Improvements](.v/architecture/ERROR_HANDLER_IMPROVEMENTS.md)** - Error handling system documentation
+### 🏗️ [Architecture](./architecture/)
+- **[Error Handler Improvements](./architecture/ERROR_HANDLER_IMPROVEMENTS.md)** - Error handling system documentation
 
-### 📑 [Reference](./docs/reference/)
-- **[Project Summary](./docs/reference/PROJECT_SUMMARY.md)** - Executive overview of wrapper capabilities and architecture
+### 📑 [Reference](./reference/)
+- **[Project Summary](./reference/PROJECT_SUMMARY.md)** - Executive overview of wrapper capabilities and architecture
 
 ---
 

@@ -1,0 +1,37 @@
+{
+  "name": "uw-wrap",
+  "version": "1.0.0",
+  "description": "## Overview This project is a Node.js wrapper for `uWebSockets.js`, JWT authentication, and other utilities. It is designed to provide a lightweight and efficient server framework.",
+  "main": "index.js",
+  "scripts": {
+    "start": "ts-node example/server.ts",
+    "start:bun": "bun run example/server.ts",
+    "dev": "scripts\\dev.bat",
+    "dev:unix": "./scripts/dev.sh",
+    "build": "tsc",
+    "clean": "scripts\\cleanup.bat",
+    "clean:unix": "./scripts/cleanup.sh",
+    "docs": "echo Documentation available in docs/ folder",
+    "health": "curl -s http://localhost:3000/health || echo Server not running",
+    "logs": "type logs\\*.log",
+    "logs:unix": "tail -f logs/*.log",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/jsonwebtoken": "^9.0.9",
+    "dotenv": "^16.5.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.14.1",
+    "sqlite3": "^5.1.7",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
+    "uws": "^200.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
