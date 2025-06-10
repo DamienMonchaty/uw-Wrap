@@ -78,15 +78,22 @@ export class LoggingMiddleware extends Middleware {
         const method = (context.method || 'unknown').toUpperCase();
         const url = context.url || 'unknown';
         
-        this.logger.info(`${method} ${url} - Started`);
+        // Only log in development or for errors
+        if (process.env.NODE_ENV === 'development') {
+            this.logger.debug(`${method} ${url} - Started`);
+        }
         
         try {
             await next();
             const duration = Date.now() - start;
-            this.logger.info(`${method} ${url} - Completed in ${duration}ms`);
+            
+            // Only log slow requests in production
+            if (process.env.NODE_ENV === 'development' || duration > 1000) {
+                this.logger.info(`${method} ${url} - Completed in ${duration}ms`);
+            }
         } catch (error) {
             const duration = Date.now() - start;
-            this.logger.error(`${method} ${url} - Error in ${duration}ms:`, error);
+            this.logger.error(`${method} ${url} - Error in ${duration}ms:`, {});
             throw error;
         }
     }

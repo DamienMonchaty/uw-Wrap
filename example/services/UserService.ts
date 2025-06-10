@@ -44,7 +44,10 @@ export class UserServiceImpl implements UserService {
      * Get all users
      */
     async getAllUsers(): Promise<User[]> {
-        this.logger.info('Fetching all users');
+        // Only log in development
+        if (process.env.NODE_ENV === 'development') {
+            this.logger.info('Fetching all users');
+        }
         try {
             return await this.repositories.users.findAll();
         } catch (error) {
@@ -118,16 +121,16 @@ export class UserServiceImpl implements UserService {
     async createUser(userData: UserCreateInput): Promise<User> {
         this.logger.info(`Creating new user: ${userData.email}`);
         
-        console.log('UserService.createUser - Starting validation checks');
+        if (process.env.NODE_ENV === 'development') { console.log('UserService.createUser - Starting validation checks'); }
         
         try {
             // Validate unique constraints directly and throw proper errors
-            console.log('UserService.createUser - Checking email exists:', userData.email);
+            if (process.env.NODE_ENV === 'development') { console.log('UserService.createUser - Checking email exists:', userData.email); }
             const emailExists = await this.repositories.users.emailExists(userData.email);
-            console.log('UserService.createUser - Email exists result:', emailExists);
+            if (process.env.NODE_ENV === 'development') { console.log('UserService.createUser - Email exists result:', emailExists); }
             
             if (emailExists) {
-                console.log('UserService.createUser - Email exists, throwing CONFLICT error');
+                if (process.env.NODE_ENV === 'development') { console.log('UserService.createUser - Email exists, throwing CONFLICT error'); }
                 throw new AppError(
                     'Email already exists',
                     ErrorCode.CONFLICT,
@@ -136,12 +139,12 @@ export class UserServiceImpl implements UserService {
                 );
             }
 
-            console.log('UserService.createUser - Checking username exists:', userData.username);
+            if (process.env.NODE_ENV === 'development') { console.log('UserService.createUser - Checking username exists:', userData.username); }
             const usernameExists = await this.repositories.users.usernameExists(userData.username);
-            console.log('UserService.createUser - Username exists result:', usernameExists);
+            if (process.env.NODE_ENV === 'development') { console.log('UserService.createUser - Username exists result:', usernameExists); }
             
             if (usernameExists) {
-                console.log('UserService.createUser - Username exists, throwing CONFLICT error');
+                if (process.env.NODE_ENV === 'development') { console.log('UserService.createUser - Username exists, throwing CONFLICT error'); }
                 throw new AppError(
                     'Username already exists',
                     ErrorCode.CONFLICT,
@@ -150,7 +153,7 @@ export class UserServiceImpl implements UserService {
                 );
             }
 
-            console.log('UserService.createUser - Validation passed, creating user');
+            if (process.env.NODE_ENV === 'development') { console.log('UserService.createUser - Validation passed, creating user'); }
             
             // Create user with default role if not specified
             const userToCreate: UserCreateInput = {
@@ -158,9 +161,9 @@ export class UserServiceImpl implements UserService {
                 role: userData.role || 'user'
             };
 
-            console.log('UserService.createUser - Calling repository.create');
+            if (process.env.NODE_ENV === 'development') { console.log('UserService.createUser - Calling repository.create'); }
             const createdUser = await this.repositories.users.create(userToCreate);
-            console.log('UserService.createUser - User created successfully:', createdUser.id);
+            if (process.env.NODE_ENV === 'development') { console.log('UserService.createUser - User created successfully:', createdUser.id); }
             this.logger.info(`User created successfully: ${createdUser.id}`);
             return createdUser;
         } catch (error) {
@@ -174,14 +177,14 @@ export class UserServiceImpl implements UserService {
             
             // If it's already an AppError, re-throw it
             if (error instanceof AppError) {
-                console.log('UserService.createUser - Re-throwing AppError');
+                if (process.env.NODE_ENV === 'development') { console.log('UserService.createUser - Re-throwing AppError'); }
                 throw error;
             }
             
             this.logger.error('Error creating user in repository:', error);
             
             // Wrap database errors
-            console.log('UserService.createUser - Wrapping as DATABASE_ERROR');
+            if (process.env.NODE_ENV === 'development') { console.log('UserService.createUser - Wrapping as DATABASE_ERROR'); }
             throw new AppError(
                 'Failed to create user',
                 ErrorCode.DATABASE_ERROR,

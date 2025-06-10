@@ -23,7 +23,6 @@ export class SQLiteProvider implements DatabaseProvider {
                     this.logger.error('Failed to connect to SQLite database', { error: err.message, dbFile: this.dbFile });
                     reject(this.errorHandler.createDatabaseError('Failed to connect to database'));
                 } else {
-                    this.logger.info('Connected to SQLite database', { dbFile: this.dbFile });
                     resolve();
                 }
             });
@@ -42,7 +41,9 @@ export class SQLiteProvider implements DatabaseProvider {
                     this.logger.error('Error closing SQLite database', { error: err.message });
                     reject(err);
                 } else {
-                    this.logger.info('SQLite database connection closed');
+                    if (process.env.NODE_ENV === 'development') {
+                        this.logger.info('SQLite database connection closed');
+                    }
                     resolve();
                 }
             });
@@ -61,7 +62,6 @@ export class SQLiteProvider implements DatabaseProvider {
                     this.logger.error('Failed to initialize SQLite schema', { error: err.message });
                     reject(this.errorHandler.createDatabaseError('Failed to initialize schema'));
                 } else {
-                    this.logger.info('SQLite schema initialized successfully');
                     resolve();
                 }
             });

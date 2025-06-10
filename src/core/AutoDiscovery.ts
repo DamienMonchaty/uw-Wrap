@@ -34,13 +34,11 @@ export class AutoDiscovery {
         
         this.logger.info(`📁 Found ${files.length} matching files:`, { files: files.map(f => path.relative(config.baseDir, f)) });
         
-        let importedCount = 0;
-        for (const file of files) {
+        let importedCount = 0;        for (const file of files) {
             try {
                 // Dynamic import to trigger decorator registration
                 await import(file);
                 importedCount++;
-                this.logger.debug(`✅ Imported: ${path.relative(config.baseDir, file)}`);
             } catch (error) {
                 this.logger.warn(`⚠️ Failed to import: ${file}`, { error: (error as Error).message });
             }
@@ -59,35 +57,26 @@ export class AutoDiscovery {
     ): string[] {
         const files: string[] = [];
 
-        this.logger.debug('🔍 Scanning directory...', { baseDir, patterns, excludePatterns });
+        if (process.env.NODE_ENV === 'development') {
+            this.logger.debug('🔍 Scanning directory...', { baseDir, patterns, excludePatterns });
+        }
 
         const scanRecursive = (currentDir: string) => {
             if (!fs.existsSync(currentDir)) {
                 this.logger.warn(`Directory does not exist: ${currentDir}`);
                 return;
-            }
-
-            const entries = fs.readdirSync(currentDir, { withFileTypes: true });
-            this.logger.debug(`📂 Scanning: ${currentDir}, found ${entries.length} entries`);
+            }            const entries = fs.readdirSync(currentDir, { withFileTypes: true });
 
             for (const entry of entries) {
-                const fullPath = path.join(currentDir, entry.name);
-
-                if (entry.isDirectory()) {
+                const fullPath = path.join(currentDir, entry.name);                if (entry.isDirectory()) {
                     // Skip node_modules and other excluded directories
                     if (this.shouldExcludeDirectory(entry.name, excludePatterns)) {
-                        this.logger.debug(`⚠️ Excluding directory: ${entry.name}`);
                         continue;
                     }
-                    this.logger.debug(`📁 Entering directory: ${entry.name}`);
                     scanRecursive(fullPath);
                 } else if (entry.isFile()) {
-                    this.logger.debug(`📄 Found file: ${fullPath}`);
                     if (this.shouldIncludeFile(fullPath, patterns, excludePatterns, baseDir)) {
                         files.push(fullPath);
-                        this.logger.debug(`✅ File included: ${path.relative(baseDir, fullPath)}`);
-                    } else {
-                        this.logger.debug(`❌ File excluded: ${path.relative(baseDir, fullPath)}`);
                     }
                 }
             }
@@ -120,25 +109,16 @@ export class AutoDiscovery {
         patterns: DiscoveryConfig['patterns'], 
         excludePatterns: string[],
         baseDir: string
-    ): boolean {
-        const relativePath = path.relative(baseDir, filePath);
+    ): boolean {        const relativePath = path.relative(baseDir, filePath);
         const fileName = path.basename(filePath);
-
-        this.logger.debug(`🔍 Checking file: ${relativePath}`, { 
-            fileName, 
-            patterns, 
-            excludePatterns 
-        });
 
         // Check exclude patterns first
         if (excludePatterns.some(pattern => this.matchPattern(relativePath, pattern))) {
-            this.logger.debug(`❌ File matches exclude pattern: ${relativePath}`);
             return false;
         }
 
         // Must be TypeScript file
         if (!fileName.endsWith('.ts') || fileName.endsWith('.d.ts')) {
-            this.logger.debug(`❌ File is not a valid TypeScript file: ${fileName}`);
             return false;
         }
 
@@ -149,20 +129,14 @@ export class AutoDiscovery {
             ...(patterns.repositories || [])
         ];
 
-        if (allPatterns.length === 0) {
-            // Default patterns if none specified
+        if (allPatterns.length === 0) {            // Default patterns if none specified
             const defaultMatch = this.hasDefaultPattern(relativePath);
-            this.logger.debug(`🔍 Using default patterns for ${relativePath}: ${defaultMatch}`);
             return defaultMatch;
-        }
-
-        const matches = allPatterns.some(pattern => {
+        }        const matches = allPatterns.some(pattern => {
             const match = this.matchPattern(relativePath, pattern);
-            this.logger.debug(`🔍 Pattern '${pattern}' vs '${relativePath}': ${match}`);
             return match;
         });
 
-        this.logger.debug(`🔍 Final match result for ${relativePath}: ${matches}`);
         return matches;
     }
 
@@ -191,13 +165,10 @@ export class AutoDiscovery {
             .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape regex chars but not * and ?
             .replace(/\*\*/g, '___DOUBLE_STAR___')  // Temporarily replace **
             .replace(/\*/g, '[^/]*')                // * matches anything except /
-            .replace(/___DOUBLE_STAR___/g, '.*')    // ** matches anything including /
-            .replace(/\?/g, '.');                   // ? matches any single char
-
+            .replace(/___DOUBLE_STAR___/g, '.*')    // ** matches anything including /            .replace(/\?/g, '.');                   // ? matches any single char
+        
         const regex = new RegExp(`^${regexPattern}$`);
         const result = regex.test(text);
-        
-        this.logger.debug(`🎯 Glob match: pattern="${pattern}" -> regex="${regexPattern}" vs text="${text}" = ${result}`);
         
         return result;
     }
@@ -205,15 +176,11 @@ export class AutoDiscovery {
     /**
      * Pattern matching for file paths
      */
-    private matchPattern(filePath: string, pattern: string): boolean {
-        // Normalize paths - convert all backslashes to forward slashes for consistent matching
+    private matchPattern(filePath: string, pattern: string): boolean {        // Normalize paths - convert all backslashes to forward slashes for consistent matching
         const normalizedPath = filePath.replace(/\\/g, '/');
         const normalizedPattern = pattern.replace(/\\/g, '/');
 
-        this.logger.debug(`🔍 Pattern matching: '${normalizedPattern}' vs '${normalizedPath}'`);
-        
         const result = this.matchGlob(normalizedPath, normalizedPattern);
-        this.logger.debug(`🔍 Match result: ${result}`);
         
         return result;
     }

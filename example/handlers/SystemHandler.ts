@@ -25,7 +25,10 @@ export class SystemHandler extends HttpHandler {
      */
     @GET('/health')
     async healthCheck(req: any, res: any) {
-        this.logger.info('Health check requested');
+        // Only log health checks in development
+        if (process.env.NODE_ENV === 'development') {
+            this.logger.info('Health check requested');
+        }
         
         const healthData = {
             status: 'healthy',
@@ -49,7 +52,10 @@ export class SystemHandler extends HttpHandler {
     @GET('/info')
     @Auth()
     async systemInfo(req: any, res: any) {
-        this.logger.info('System info requested');
+        // Only log in development mode
+        if (process.env.NODE_ENV === 'development') {
+            this.logger.info('System info requested');
+        }
         
         const systemData = {
             name: 'uW-Wrap Server',
@@ -82,7 +88,10 @@ export class SystemHandler extends HttpHandler {
     @GET('/metrics')
     @Auth(['admin'])
     async systemMetrics(req: any, res: any) {
-        this.logger.info('System metrics requested');
+        // Only log in development mode
+        if (process.env.NODE_ENV === 'development') {
+            this.logger.info('System metrics requested');
+        }
         
         const metrics = {
             timestamp: new Date().toISOString(),
@@ -119,7 +128,10 @@ export class SystemHandler extends HttpHandler {
      */
     @GET('/status')
     async serverStatus(req: any, res: any) {
-        this.logger.info('Server status requested');
+        // Only log in development mode
+        if (process.env.NODE_ENV === 'development') {
+            this.logger.info('Server status requested');
+        }
         
         const status = {
             server: 'running',

@@ -229,7 +229,9 @@ export class ServiceRegistry<TConfig extends BaseAppConfig = BaseAppConfig> {
         const registeredServices = this.container.getRegisteredServices();
         const handlers: any[] = [];
 
-        console.log(`🔍 Checking ${registeredServices.length} registered services for handlers...`);
+        if (process.env.NODE_ENV === 'development') {
+            console.log(`🔍 Checking ${registeredServices.length} registered services for handlers...`);
+        }
 
         for (const serviceId of registeredServices) {
             try {
@@ -240,11 +242,7 @@ export class ServiceRegistry<TConfig extends BaseAppConfig = BaseAppConfig> {
                         ? serviceId.name 
                         : String(serviceId);
 
-                console.log(`🔎 Checking service: ${serviceIdString} (type: ${typeof serviceId})`);
-
                 const instance = this.container.resolve(serviceId);
-                
-                console.log(`🔎 Resolved instance: ${instance?.constructor?.name}, has registerRoutes: ${typeof instance?.registerRoutes === 'function'}`);
                 
                 // Check if it's a handler (has registerRoutes method and extends BaseHandler)
                 if (instance && 
@@ -256,7 +254,9 @@ export class ServiceRegistry<TConfig extends BaseAppConfig = BaseAppConfig> {
                         instance: instance
                     });
                     
-                    console.log(`✅ Found handler: ${serviceIdString} (${instance.constructor.name})`);
+                    if (process.env.NODE_ENV === 'development') {
+                        console.log(`✅ Found handler: ${serviceIdString} (${instance.constructor.name})`);
+                    }
                 }
             } catch (error) {
                 // Skip services that can't be resolved or aren't handlers
@@ -272,9 +272,6 @@ export class ServiceRegistry<TConfig extends BaseAppConfig = BaseAppConfig> {
 
         if (handlers.length > 0) {
             this.router.registerHandlers(handlers);
-            
-            const logger = this.container.resolve<Logger>(TYPES.Logger);
-            logger.info(`Auto-registered ${handlers.length} handler(s) with routes`);
         } else {
             console.warn('⚠️ No handlers found for route registration');
         }

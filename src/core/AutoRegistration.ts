@@ -105,7 +105,6 @@ export class AutoRegistration {
             }
         }
 
-        console.log('📦 Auto-registration summary:', stats);
         return stats;
     }
 
@@ -134,7 +133,6 @@ export class AutoRegistration {
                 container.registerTransient(identifier, factory);
             }
 
-            console.log(`✅ Registered ${type}: ${String(identifier)} (${singleton ? 'singleton' : 'transient'})`);
             return type;
         } catch (error) {
             console.warn(`⚠️ Failed to register ${type} ${String(identifier)}:`, (error as Error).message);

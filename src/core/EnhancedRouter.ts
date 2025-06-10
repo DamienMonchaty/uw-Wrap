@@ -69,12 +69,8 @@ export class EnhancedRouter {
 
         for (const route of routes) {
             const fullPath = getFullPath(classMetadata, route.path);
-            // Debug: Log middleware metadata for each route
-            this.logger.debug(`Route ${route.method.toUpperCase()} ${fullPath} middlewares:`, route.middlewares);
             this.registerRoute(route, fullPath, handlerInstance || new HandlerClass());
         }
-
-        this.logger.info(`Registered ${routes.length} routes from ${HandlerClass.name} with base path: ${classMetadata?.basePath || '/'}`);
     }
 
     /**
@@ -181,7 +177,6 @@ export class EnhancedRouter {
 
         // Register with wrapper
         this.wrapper.addHttpHandler(route.method as any, fullPath, completeHandler);
-        this.logger.debug(`Registered ${route.method.toUpperCase()} ${fullPath}`);
     }
 
     /**
@@ -334,15 +329,10 @@ export class EnhancedRouter {
                 }
             }
             
-            // Debug logging for header extraction
-            console.log(`[HEADER DEBUG] URL: ${req.getUrl()}, Headers extracted:`, Object.keys(headers));
-            if (headers['authorization']) {
-                console.log(`[HEADER DEBUG] Authorization header found: ${headers['authorization'].substring(0, 20)}...`);
-            } else {
-                console.log(`[HEADER DEBUG] Authorization header MISSING!`);
-            }
         } catch (error) {
-            console.log(`[HEADER DEBUG] Header extraction error:`, error);
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`[HEADER DEBUG] Header extraction error:`, error);
+            }
         }
         
         return headers;

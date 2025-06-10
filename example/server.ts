@@ -1,22 +1,50 @@
-// ============================================================================
-// SERVER BOOTSTRAP - Simplified with ApplicationBootstrap
-// ============================================================================
+/**
+ * Main Server Entry Point
+ * Demonstrates the simplified ApplicationBootstrap API
+ */
 
 import { ApplicationBootstrap } from '../src/core/ApplicationBootstrap';
 import { createConfigFromEnv } from './core/AppConfig';
-
-// ============================================================================
-// MAIN SERVER STARTUP - Now just 3 lines! 🎉
-// ============================================================================
 
 async function startServer(): Promise<void> {
     const config = createConfigFromEnv();
     const bootstrap = new ApplicationBootstrap(config);
     
-    // All the complexity is now handled by the framework! 
+    // Start with all features enabled
     await bootstrap.start({
-        schemaPath: '../schema.sql',  // Auto-detected if not specified
-        verbose: false                 // Enable startup logging
+        verbose: true,
+        enableHealthChecks: true,
+        enableMetrics: true,
+        enableGracefulShutdown: true,
+        shutdownTimeoutMs: 10000,
+        metricsIntervalMs: 30000
+    });
+
+    // Setup custom monitoring
+    setupCustomMonitoring(bootstrap);
+}
+
+function setupCustomMonitoring(bootstrap: ApplicationBootstrap): void {
+    // Add custom health check
+    const healthService = bootstrap.getHealthCheckService();
+    healthService?.addChecker('application', async () => ({
+        name: 'application',
+        status: 'pass',
+        duration: 1,
+        message: 'Application is running normally'
+    }));
+
+    // Track startup metrics
+    const metricsService = bootstrap.getMetricsService();
+    if (metricsService) {
+        metricsService.increment('app.startup.total');
+        metricsService.gauge('app.version', 1.0);
+    }
+
+    // Custom cleanup on shutdown
+    bootstrap.onShutdown(async () => {
+        console.log('🧹 Performing application cleanup...');
+        metricsService?.increment('app.shutdown.graceful');
     });
 }
 
@@ -30,14 +58,6 @@ if (require.main === module) {
         process.exit(1);
     });
 
-    // Graceful shutdown handling
-    process.on('SIGINT', () => {
-        console.log('\n🛑 Received SIGINT, shutting down gracefully...');
-        process.exit(0);
-    });
-
-    process.on('SIGTERM', () => {
-        console.log('\n🛑 Received SIGTERM, shutting down gracefully...');
-        process.exit(0);
-    });
+    // Note: Graceful shutdown is now handled automatically by ApplicationBootstrap
+    // No need for manual SIGINT/SIGTERM handlers unless you need custom logic
 }

@@ -23,7 +23,7 @@ export class UWebSocketWrapper {
         return new Promise((resolve, reject) => {
             this.app.listen(this.port, (token: any) => {
                 if (token) {
-                    this.logger.info(`Server listening on port ${this.port}`, { port: this.port });
+                    this.logger.info(`🚀 Server running on port ${this.port}`);
                     resolve();
                 } else {
                     const error = new Error('Failed to start server');
@@ -118,8 +118,6 @@ export class UWebSocketWrapper {
                 this.app.del(route, uwsHandler);
                 break;
         }
-
-        this.logger.debug(`Added ${method.toUpperCase()} handler for route: ${route}`, { route, method, requireAuth });
     }
 
     addWebSocketHandler<UserData = any>(
@@ -163,8 +161,6 @@ export class UWebSocketWrapper {
                 }
             },
         });
-
-        this.logger.debug(`Added WebSocket handler for route: ${route}`, { route });
     }
 
     // Helper method to send JSON responses

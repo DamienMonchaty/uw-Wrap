@@ -86,3 +86,6 @@ bun-*.js
 
 # Documentation build
 docs/build/
+
+# Benchmarks
+benchmarks/
