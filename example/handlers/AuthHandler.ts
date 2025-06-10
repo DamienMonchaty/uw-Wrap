@@ -1,10 +1,11 @@
-import { Route, GET, POST, Auth, Validate } from '../../src/core/route-decorators';
-import { BaseHandler } from '../../src/core/http-handler';
-import { UWebSocketWrapper } from '../../src/core/server-wrapper';
+import { Route, GET, POST, Auth, Validate } from '../../src/core/RouteDecorators';
+import { HttpHandler } from '../../src/core/HttpHandler';
+import { UWebSocketWrapper } from '../../src/core/ServerWrapper';
 import { Logger } from '../../src/utils/logger';
 import { ErrorHandler } from '../../src/utils/errorHandler';
 import { JWTManager } from '../../src/auth/jwtManager';
 import { HttpRequest, HttpResponse, EnhancedHttpRequest } from '../../src/types/uws-types';
+import { Controller } from '../../src/core/AutoRegistration';
 
 // Validation schemas
 export const LoginSchema = {
@@ -37,8 +38,9 @@ export const RefreshTokenSchema = {
 /**
  * Authentication handler using modern decorator system
  */
+@Controller('AuthHandler') // ← Auto-registration as controller
 @Route('/auth')
-export class AuthHandler extends BaseHandler {
+export class AuthHandler extends HttpHandler {
     private jwtManager: JWTManager;
 
     constructor(

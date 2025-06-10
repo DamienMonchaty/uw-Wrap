@@ -1,19 +1,21 @@
 import { DatabaseProvider } from '../../src/database/interfaces/DatabaseProvider';
 import { Logger } from '../../src/utils/logger';
 import { ErrorHandler } from '../../src/utils/errorHandler';
+import { Service } from '../../src/core/AutoRegistration';
 import { 
     RepositoryFactory as GenericRepositoryFactory, 
     type BaseRepositoryMap, 
     type RepositoryConfig as GenericRepositoryConfig 
 } from '../../src/database/repositories/GenericRepositoryFactory';
 import { UserRepository } from './repositories/UserRepository';
+import { ProductRepository } from './repositories/ProductRepository';
 
 /**
  * Application-specific repository map
  */
 export interface AppRepositoryMap extends BaseRepositoryMap {
     users: UserRepository;
-    posts: any; // You can create a PostRepository later
+    products: ProductRepository; // You can create a PostRepository later
 }
 
 /**
@@ -24,6 +26,11 @@ const APP_REPOSITORY_CONFIGS: Record<keyof AppRepositoryMap, GenericRepositoryCo
         repositoryClass: UserRepository,
         tableName: 'users',
         primaryKey: 'id'
+    },
+    products: {
+        repositoryClass: ProductRepository,
+        tableName: 'products',
+        primaryKey: 'id'
     }
 };
 
@@ -31,6 +38,7 @@ const APP_REPOSITORY_CONFIGS: Record<keyof AppRepositoryMap, GenericRepositoryCo
  * Application-specific repository manager using the generic factory from the wrapper
  * Provides clean, typed access to specialized repositories
  */
+@Service('AppRepositoryManager') // ← Auto-registration as service
 export class AppRepositoryManager {
     private repositoryFactory: GenericRepositoryFactory<AppRepositoryMap>;
     private logger: Logger;
@@ -50,6 +58,14 @@ export class AppRepositoryManager {
     get users(): UserRepository {
         this.logger.debug('Accessing UserRepository');
         return this.repositoryFactory.getRepository('users');
+    }
+
+    /**
+     * Get Product Repository with all specialized methods
+     */
+    get products(): ProductRepository {
+        this.logger.debug('Accessing ProductRepository');
+        return this.repositoryFactory.getRepository('products');
     }
 
     /**

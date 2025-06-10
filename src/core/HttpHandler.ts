@@ -1,4 +1,4 @@
-import { UWebSocketWrapper } from './server-wrapper';
+import { UWebSocketWrapper } from './ServerWrapper';
 import { Logger } from '../utils/logger';
 import { ErrorHandler } from '../utils/errorHandler';
 import { HttpRequest, HttpResponse, EnhancedHttpRequest } from '../types/uws-types';
@@ -7,7 +7,7 @@ import { HttpRequest, HttpResponse, EnhancedHttpRequest } from '../types/uws-typ
  * Base handler class with common functionality for route handling
  * This provides a foundation for creating organized, modular route handlers
  */
-export abstract class BaseHandler {
+export abstract class HttpHandler {
     protected server: UWebSocketWrapper;
     protected logger: Logger;
     protected errorHandler: ErrorHandler;

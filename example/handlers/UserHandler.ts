@@ -1,8 +1,9 @@
-import { Route, GET, POST, PUT, DELETE, Auth, Validate } from '../../src/core/route-decorators';
-import { BaseHandler } from '../../src/core/http-handler';
-import { UWebSocketWrapper } from '../../src/core/server-wrapper';
+import { Route, GET, POST, PUT, DELETE, Auth, Validate } from '../../src/core/RouteDecorators';
+import { HttpHandler } from '../../src/core/HttpHandler';
+import { UWebSocketWrapper } from '../../src/core/ServerWrapper';
 import { Logger } from '../../src/utils/logger';
 import { ErrorHandler } from '../../src/utils/errorHandler';
+import { Controller } from '../../src/core/AutoRegistration';
 import { UserServiceImpl } from '../services/UserService';
 
 // Validation schemas
@@ -40,10 +41,11 @@ export const BatchUsersSchema = {
 };
 
 /**
- * User management handler using modern decorator system
+ * User management handler using modern decorator system with auto-registration
  */
+@Controller('UserHandler') // ← Auto-registration as controller
 @Route('/users')
-export class UserHandler extends BaseHandler {
+export class UserHandler extends HttpHandler {
     private userService: UserServiceImpl;
 
     constructor(

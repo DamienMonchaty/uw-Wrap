@@ -2,6 +2,8 @@ import { Logger } from '../../src/utils/logger';
 import { AppError, ErrorCode, ErrorSeverity, ErrorCategory } from '../../src/utils/errorHandler';
 import { AppRepositoryManager } from '../database/AppRepositoryManager';
 import { User, UserCreateInput, UserUpdateInput } from '../models/User';
+import { Service } from '../../src/core/AutoRegistration';
+import 'reflect-metadata';
 
 /**
  * User Service Interface
@@ -28,6 +30,7 @@ export interface UserService {
  * User Service Implementation with IoC
  * Handles all user-related business logic using the repository pattern
  */
+@Service('UserService') // ← Auto-registration as service with custom identifier
 export class UserServiceImpl implements UserService {
     private repositories: AppRepositoryManager;
     private logger: Logger;
@@ -530,3 +533,6 @@ export class UserServiceImpl implements UserService {
         }
     }
 }
+
+// Ajout explicite des métadonnées de type pour résoudre le problème "Object"
+Reflect.defineMetadata('design:paramtypes', [AppRepositoryManager, Logger], UserServiceImpl);

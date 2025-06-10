@@ -2,11 +2,14 @@ import { CrudRepository } from '../../../src/database/repositories/CrudRepositor
 import { DatabaseProvider } from '../../../src/database/interfaces/DatabaseProvider';
 import { ErrorHandler } from '../../../src/utils/errorHandler';
 import { User } from '../../models/User';
+import { Repository } from '../../../src/core/AutoRegistration';
 
 /**
  * Specialized User Repository with domain-specific methods
  * Extends the generic CrudRepository with User-specific business logic
+ * Auto-registered as singleton repository
  */
+@Repository('UserRepository') // ← Auto-registration comme repository autonome
 export class UserRepository extends CrudRepository<User> {
     constructor(provider: DatabaseProvider, errorHandler: ErrorHandler) {
         super(provider, {

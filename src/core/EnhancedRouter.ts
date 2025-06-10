@@ -3,8 +3,8 @@
  * Automatically registers routes from decorated handler classes
  */
 
-import { UWebSocketWrapper } from './server-wrapper';
-import { RouteMetadata, MiddlewareMetadata, extractRouteInfo, getFullPath } from './route-decorators';
+import { UWebSocketWrapper } from './ServerWrapper';
+import { RouteMetadata, MiddlewareMetadata, extractRouteInfo, getFullPath } from './RouteDecorators';
 import { 
     Middleware, 
     MiddlewareContext, 
@@ -13,7 +13,7 @@ import {
     AuthenticationMiddleware, 
     ValidationMiddleware, 
     RateLimitingMiddleware 
-} from './authentication-middleware';
+} from './AuthenticationMiddleware';
 import { Logger } from '../utils/logger';
 import { ErrorHandler } from '../utils/errorHandler';
 

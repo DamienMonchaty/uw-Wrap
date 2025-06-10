@@ -1,14 +1,16 @@
-import { Route, GET, POST, Auth } from '../../src/core/route-decorators';
-import { BaseHandler } from '../../src/core/http-handler';
-import { UWebSocketWrapper } from '../../src/core/server-wrapper';
+import { Route, GET, POST, Auth } from '../../src/core/RouteDecorators';
+import { HttpHandler } from '../../src/core/HttpHandler';
+import { UWebSocketWrapper } from '../../src/core/ServerWrapper';
 import { Logger } from '../../src/utils/logger';
 import { ErrorHandler } from '../../src/utils/errorHandler';
+import { Controller } from '../../src/core/AutoRegistration';
 
 /**
  * System handler for health checks and system information using modern decorator system
  */
+@Controller('SystemHandler') // ← Auto-registration as controller
 @Route('/system')
-export class SystemHandler extends BaseHandler {
+export class SystemHandler extends HttpHandler {
     constructor(
         server: UWebSocketWrapper,
         logger: Logger,
