@@ -1,10 +1,13 @@
-import { Route, GET, POST, PUT, DELETE, Auth, Validate } from '../../src/core/RouteDecorators';
+import { Route, GET, POST, PUT, DELETE } from '../../src/core/decorators/RouteDecorators';
+import { Auth } from '../../src/core/decorators/AuthDecorators';
+import { Validate } from '../../src/core/decorators/ValidationDecorators';
 import { HttpHandler } from '../../src/core/HttpHandler';
 import { UWebSocketWrapper } from '../../src/core/ServerWrapper';
 import { Logger } from '../../src/utils/logger';
 import { ErrorHandler } from '../../src/utils/errorHandler';
 import { Controller } from '../../src/core/AutoRegistration';
 import { UserServiceImpl } from '../services/UserService';
+import { MiddlewareContext } from '../../src/middleware/AuthenticationMiddleware';
 
 // Validation schemas
 export const CreateUserSchema = {
@@ -29,21 +32,10 @@ export const UpdateUserSchema = {
     }
 };
 
-export const BatchUsersSchema = {
-    type: 'object',
-    required: ['users'],
-    properties: {
-        users: {
-            type: 'array',
-            items: CreateUserSchema
-        }
-    }
-};
-
 /**
- * User management handler using modern decorator system with auto-registration
+ * Simple User Handler - Modern implementation with service only (no repository)
  */
-@Controller('UserHandler') // ← Auto-registration as controller
+@Controller('UserHandler')
 @Route('/users')
 export class UserHandler extends HttpHandler {
     private userService: UserServiceImpl;
@@ -64,25 +56,23 @@ export class UserHandler extends HttpHandler {
     @POST('/')
     @Validate(CreateUserSchema)
     @Auth(['admin', 'moderator'])
-    async createUser(req: any, res: any) {
-        const userData = this.getRequestBody(req, res);
-        
-        const user = await this.userService.createUser({
-            username: userData.username,
-            email: userData.email,
-            name: userData.name
-        });
-        
-        this.logger.info(`User created successfully: ${user.id}`);
-        
-        return { 
-            success: true,
-            data: {
-                userId: user.id,
-                user
-            },
-            message: 'User created successfully'
-        };
+    async createUser(context: MiddlewareContext) {
+        try {
+            const userData = await this.getRequestBody(context);
+            
+            const user = await this.userService.createUser({
+                username: userData.username as string,
+                email: userData.email as string,
+                name: userData.name as string
+            });
+            
+            this.logger.info(`User created successfully: ${user.id}`);
+            
+            this.sendSuccess(context, { user }, 'User created successfully');
+        } catch (error) {
+            this.logger.error('Error creating user:', error);
+            this.sendError(context, 'Failed to create user', 500);
+        }
     }
 
     /**
@@ -90,16 +80,17 @@ export class UserHandler extends HttpHandler {
      */
     @GET('/')
     @Auth()
-    async getAllUsers(req: any, res: any) {
-        const users = await this.userService.getAllUsers();
-        
-        this.logger.info(`Retrieved ${users.length} users`);
-        
-        return {
-            success: true,
-            data: { users },
-            total: users.length
-        };
+    async getAllUsers(context: MiddlewareContext) {
+        try {
+            const users = await this.userService.getAllUsers();
+            
+            this.logger.info(`Retrieved ${users.length} users`);
+            
+            this.sendSuccess(context, { users, total: users.length });
+        } catch (error) {
+            this.logger.error('Error retrieving users:', error);
+            this.sendError(context, 'Failed to retrieve users', 500);
+        }
     }
 
     /**
@@ -107,25 +98,29 @@ export class UserHandler extends HttpHandler {
      */
     @GET('/:id')
     @Auth()
-    async getUserById(req: any, res: any) {
-        const { id } = this.getPathParams(req);
-        
-        if (!id) {
-            this.createValidationError('User ID is required', 'id');
-        }
+    async getUserById(context: MiddlewareContext) {
+        try {
+            const { id } = this.getPathParams(context);
+            
+            if (!id) {
+                this.sendError(context, 'User ID is required', 400);
+                return;
+            }
 
-        const user = await this.userService.getUserById(parseInt(id));
-        
-        if (!user) {
-            this.createNotFoundError('User', id);
-        }
+            const user = await this.userService.getUserById(parseInt(id));
+            
+            if (!user) {
+                this.sendError(context, `User with ID ${id} not found`, 404);
+                return;
+            }
 
-        this.logger.info(`Retrieved user: ${id}`);
-        
-        return {
-            success: true,
-            data: { user }
-        };
+            this.logger.info(`Retrieved user: ${id}`);
+            
+            this.sendSuccess(context, { user });
+        } catch (error) {
+            this.logger.error('Error retrieving user:', error);
+            this.sendError(context, 'Failed to retrieve user', 500);
+        }
     }
 
     /**
@@ -134,27 +129,30 @@ export class UserHandler extends HttpHandler {
     @PUT('/:id')
     @Validate(UpdateUserSchema)
     @Auth(['admin', 'moderator'])
-    async updateUser(req: any, res: any) {
-        const { id } = this.getPathParams(req);
-        
-        if (!id) {
-            this.createValidationError('User ID is required', 'id');
-        }
+    async updateUser(context: MiddlewareContext) {
+        try {
+            const { id } = this.getPathParams(context);
+            
+            if (!id) {
+                this.sendError(context, 'User ID is required', 400);
+                return;
+            }
 
-        const updateData = this.getRequestBody(req, res);
-        const user = await this.userService.updateUser(parseInt(id), updateData);
-        
-        if (!user) {
-            this.createNotFoundError('User', id);
-        }
+            const updateData = await this.getRequestBody(context);
+            const user = await this.userService.updateUser(parseInt(id), updateData);
+            
+            if (!user) {
+                this.sendError(context, `User with ID ${id} not found`, 404);
+                return;
+            }
 
-        this.logger.info(`User updated successfully: ${id}`);
-        
-        return {
-            success: true,
-            data: { user },
-            message: 'User updated successfully'
-        };
+            this.logger.info(`User updated successfully: ${id}`);
+            
+            this.sendSuccess(context, { user }, 'User updated successfully');
+        } catch (error) {
+            this.logger.error('Error updating user:', error);
+            this.sendError(context, 'Failed to update user', 500);
+        }
     }
 
     /**
@@ -162,142 +160,33 @@ export class UserHandler extends HttpHandler {
      */
     @DELETE('/:id')
     @Auth(['admin'])
-    async deleteUser(req: any, res: any) {
-        const { id } = this.getPathParams(req);
-        
-        if (!id) {
-            this.createValidationError('User ID is required', 'id');
-        }
+    async deleteUser(context: MiddlewareContext) {
+        try {
+            const { id } = this.getPathParams(context);
+            
+            if (!id) {
+                this.sendError(context, 'User ID is required', 400);
+                return;
+            }
 
-        const deleted = await this.userService.deleteUser(parseInt(id));
-        
-        if (!deleted) {
-            this.createNotFoundError('User', id);
-        }
+            const deleted = await this.userService.deleteUser(parseInt(id));
+            
+            if (!deleted) {
+                this.sendError(context, `User with ID ${id} not found`, 404);
+                return;
+            }
 
-        this.logger.info(`User deleted successfully: ${id}`);
-        
-        return {
-            success: true,
-            message: 'User deleted successfully'
-        };
+            this.logger.info(`User deleted successfully: ${id}`);
+            
+            this.sendSuccess(context, {}, 'User deleted successfully');
+        } catch (error) {
+            this.logger.error('Error deleting user:', error);
+            this.sendError(context, 'Failed to delete user', 500);
+        }
     }
 
     /**
-     * Create multiple users
-     */
-    @POST('/batch')
-    @Validate(BatchUsersSchema)
-    @Auth(['admin'])
-    async createBatchUsers(req: any, res: any) {
-        const { users } = this.getRequestBody(req, res);
-        
-        const result = await this.userService.createMultipleUsers(users);
-        
-        this.logger.info(`Created ${result.length} users in batch`);
-        
-        return {
-            success: true,
-            data: { users: result },
-            message: `${result.length} users created successfully`
-        };
-    }
-
-    /**
-     * Get users by role
-     */
-    @GET('/by-role/:role')
-    @Auth(['admin', 'moderator'])
-    async getUsersByRole(req: any, res: any) {
-        const { role } = this.getPathParams(req);
-        
-        if (!role) {
-            this.createValidationError('Role is required', 'role');
-        }
-
-        const users = await this.userService.getUsersByRole(role);
-        
-        this.logger.info(`Retrieved ${users.length} users with role: ${role}`);
-        
-        return {
-            success: true,
-            data: { users, role },
-            total: users.length
-        };
-    }
-
-    /**
-     * Get user statistics
-     */
-    @GET('/stats')
-    @Auth(['admin'])
-    async getUserStats(req: any, res: any) {
-        const stats = await this.userService.getUserStats();
-        
-        this.logger.info('Retrieved user statistics');
-        
-        return {
-            success: true,
-            data: { stats }
-        };
-    }
-
-    /**
-     * Promote user to admin
-     */
-    @POST('/:id/promote')
-    @Auth(['admin'])
-    async promoteUser(req: any, res: any) {
-        const { id } = this.getPathParams(req);
-        
-        if (!id) {
-            this.createValidationError('User ID is required', 'id');
-        }
-
-        const user = await this.userService.promoteUserToAdmin(parseInt(id));
-        
-        if (!user) {
-            this.createNotFoundError('User', id);
-        }
-
-        this.logger.info(`User promoted to admin: ${id}`);
-        
-        return {
-            success: true,
-            data: { user },
-            message: 'User promoted to admin successfully'
-        };
-    }
-
-    /**
-     * Demote user from admin
-     */
-    @POST('/:id/demote')
-    @Auth(['admin'])
-    async demoteUser(req: any, res: any) {
-        const { id } = this.getPathParams(req);
-        
-        if (!id) {
-            this.createValidationError('User ID is required', 'id');
-        }
-
-        const user = await this.userService.demoteUserFromAdmin(parseInt(id));
-        
-        if (!user) {
-            this.createNotFoundError('User', id);
-        }
-
-        this.logger.info(`User demoted from admin: ${id}`);
-        
-        return {
-            success: true,
-            data: { user },
-            message: 'User demoted from admin successfully'
-        };
-    }
-
-    /**
-     * Legacy method - routes are now automatically registered via decorators
+     * Routes are automatically registered via decorators
      */
     registerRoutes(): void {
         this.logger.info('UserHandler routes are automatically registered via decorators');

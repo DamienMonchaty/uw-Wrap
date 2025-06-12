@@ -1,203 +1,212 @@
 /**
- * Application Bootstrap - Simplified server startup with auto-discovery
- * Factorizes common server initialization patterns
+ * ApplicationBootstrap - Modern version using new container system
+ * Single responsibility: Application lifecycle management
  */
 
 import 'dotenv/config';
-import path from 'path';
-import fs from 'fs';
-import { ServiceRegistry, BaseAppConfig } from './ServiceRegistry';
-import { Container } from './IocContainer';
-import { DatabaseProvider } from '../database/interfaces/DatabaseProvider';
+import { Container } from './container/Container';
+import { ContainerBuilder } from './container/ContainerBuilder';
+import { SERVICE_TYPES } from './container/ServiceTypes';
+import { ApplicationConfig, createDefaultApplicationConfig } from './container/ApplicationConfig';
 import { Logger } from '../utils/logger';
-import { TYPES } from './IocContainer';
-import { HealthCheckService } from './HealthCheck';
-import { ConfigValidator } from './ConfigValidator';
-import { MetricsService } from './Metrics';
+import { ModuleLoader } from './bootstrap/ModuleLoader';
+import { ServerStarter } from './bootstrap/ServerStarter';
+import { AutoDiscovery } from './AutoDiscovery';
+import { HealthCheckService } from './health/HealthCheckService';
+import { MetricsService } from './metrics/MetricsService';
+
+/**
+ * Bootstrap result interface
+ */
+export interface BootstrapResult {
+    container: Container;
+    config: ApplicationConfig;
+    router: any;
+    serverWrapper: any;
+}
 
 /**
  * Bootstrap configuration options
  */
 export interface BootstrapOptions {
-    /** Custom schema path (relative to project root) */
-    schemaPath?: string;
-    /** Skip database initialization */
-    skipDatabaseInit?: boolean;
-    /** Custom discovery patterns */
-    discoveryPatterns?: any;
-    /** Enable verbose logging during startup */
-    verbose?: boolean;
-    /** Enable automatic graceful shutdown handling */
-    enableGracefulShutdown?: boolean;
-    /** Shutdown timeout in milliseconds */
-    shutdownTimeoutMs?: number;
-    /** Skip configuration validation */
-    skipConfigValidation?: boolean;
-    /** Enable built-in health checks */
-    enableHealthChecks?: boolean;
-    /** Enable metrics collection */
+    enableAutoDiscovery?: boolean;
     enableMetrics?: boolean;
-    /** Metrics collection interval in milliseconds */
+    enableHealthCheck?: boolean;
     metricsIntervalMs?: number;
+    skipDatabaseInit?: boolean;
+    verbose?: boolean;
 }
 
 /**
- * Application Bootstrap Class
- * Simplifies server startup to a single method call
+ * Application Bootstrap Class - Modern version using new container system
+ * Single responsibility: Application lifecycle management
  */
-export class ApplicationBootstrap<TConfig extends BaseAppConfig = BaseAppConfig> {
-    private serviceRegistry: ServiceRegistry<TConfig>;
+export class ApplicationBootstrap {
+    private containerBuilder: ContainerBuilder;
     private container?: Container;
-    private shutdownHandlers: (() => Promise<void>)[] = [];
-    private isShuttingDown = false;
-    private healthCheckService?: HealthCheckService;
-    private metricsService?: MetricsService;
-    private configValidator: ConfigValidator;
+    private moduleLoader?: ModuleLoader;
+    private serverStarter?: ServerStarter;
+    private config: ApplicationConfig;
+    private logger: Logger;
 
-    constructor(config: TConfig) {
-        this.configValidator = new ConfigValidator();
+    constructor(config: ApplicationConfig) {
+        // Apply defaults if needed
+        this.config = { ...createDefaultApplicationConfig(), ...config };
+        this.logger = new Logger();
         
-        // Validate and apply defaults to config
-        if (!this.skipValidation(config)) {
-            const { config: validatedConfig, validation } = this.configValidator.validateAndApplyDefaults(config);
-            
-            if (!validation.valid) {
-                console.error('❌ Configuration validation failed:');
-                console.error(this.configValidator.createReport(validation));
-                throw new Error('Invalid configuration');
-            }
-            
-            if (validation.warnings.length > 0) {
-                console.warn('⚠️ Configuration warnings:');
-                validation.warnings.forEach(warning => console.warn(`  - ${warning}`));
-            }
-            
-            // Type assertion is safe here since we're extending the base config
-            config = validatedConfig as TConfig;
-        }
+        // Initialize container builder with modern system
+        this.containerBuilder = ContainerBuilder.create({
+            enableDebug: false, // Disable debug for clean output
+            logger: this.logger
+        }).withConfig(this.config);
         
-        this.serviceRegistry = new ServiceRegistry(config);
-    }
-
-    private skipValidation(config: any): boolean {
-        return config._skipValidation === true;
+        this.logger.info('🔄 ApplicationBootstrap initialized with modern container system');
     }
 
     /**
-     * Start the application with minimal configuration
-     * Handles all the boilerplate automatically
+     * Start the application using modern architecture
      */
-    async start(options: BootstrapOptions = {}): Promise<{ container: Container; serviceRegistry: ServiceRegistry<TConfig> }> {
-        const startTime = Date.now();
-        
+    async start(options: BootstrapOptions = {}): Promise<BootstrapResult> {
         try {
-            // 1. Setup application with auto-discovery
-            console.log('🚀 Starting uW-Wrap application...');
-            const { container } = await this.serviceRegistry.setupApplicationWithAutoDiscovery(options.discoveryPatterns);
-            this.container = container;
+            this.logger.info('🚀 Starting application with modern bootstrap...');
 
-            // 2. Initialize database if not skipped
-            if (!options.skipDatabaseInit) {
-                await this.initializeDatabase(options.schemaPath);
-            }
+            // 1. Build container with modern system
+            const result = this.containerBuilder.build();
+            this.container = result.container;
 
-            // 3. Setup health checks if enabled
-            if (options.enableHealthChecks !== false) {
-                this.setupHealthChecks();
-            }
+            // 2. Manual registration of core services (temporary fix)
+            this.registerCoreServices();
 
-            // 4. Setup metrics if enabled
-            if (options.enableMetrics !== false) {
-                this.setupMetrics(options.metricsIntervalMs);
-            }
+            // 3. Perform auto-discovery
+            await this.performAutoDiscovery();
 
-            // 5. Setup graceful shutdown if enabled (default: true)
-            if (options.enableGracefulShutdown !== false) {
-                this.setupGracefulShutdown(options.shutdownTimeoutMs);
-            }
+            // 4. Setup module loader
+            this.moduleLoader = new ModuleLoader(this.container);
+            
+            // 4. Setup server lifecycle management
+            const wrapper = this.container.resolve(SERVICE_TYPES.ServerWrapper) as any; // Type assertion needed for start method
+            this.serverStarter = new ServerStarter(this.moduleLoader, this.logger);
 
-            // 6. Start the server
-            await this.serviceRegistry.startServer();
+            // 5. Start the actual HTTP server
+            await wrapper.start();
 
-            // 7. Log success
-            const logger = container.resolve<Logger>(TYPES.Logger);
-            const duration = Date.now() - startTime;
-            logger.info(`🎉 Application started successfully in ${duration}ms`);
+            // 6. Start server lifecycle management
+            await this.serverStarter.start();
 
-            return { container, serviceRegistry: this.serviceRegistry };
+            this.logger.info('✅ Application started successfully with modern architecture');
 
+            return {
+                container: this.container,
+                config: this.config,
+                router: this.container.resolve(SERVICE_TYPES.Router),
+                serverWrapper: wrapper
+            };
         } catch (error) {
-            console.error('💥 Failed to start application:', error);
+            this.logger.error('❌ Failed to start application:', error);
             throw error;
         }
     }
 
     /**
-     * Quick start with minimal configuration
-     * Perfect for prototyping and simple applications
+     * Manual registration of core services - temporary fix
      */
-    async quickStart(): Promise<{ container: Container; serviceRegistry: ServiceRegistry<TConfig> }> {
-        return this.start({
-            verbose: true,
-            skipDatabaseInit: false  // Auto-detect schema
-        });
-    }
-
-    /**
-     * Initialize database with automatic schema detection
-     */
-    private async initializeDatabase(customSchemaPath?: string): Promise<void> {
+    private registerCoreServices(): void {
         if (!this.container) {
             throw new Error('Container not initialized');
         }
 
-        const logger = this.container.resolve<Logger>(TYPES.Logger);
-        const dbProvider = this.container.resolve<DatabaseProvider>(TYPES.DatabaseProvider);
-        
-        // Auto-detect schema path
-        const schemaPath = customSchemaPath || this.detectSchemaPath();
-        
+        // Register Logger
+        this.container.registerSingleton(SERVICE_TYPES.Logger, () => {
+            const { Logger } = require('../utils/logger');
+            return new Logger();
+        });
+
+        // Register ErrorHandler
+        this.container.registerSingleton(SERVICE_TYPES.ErrorHandler, (container) => {
+            const logger = container.resolve(SERVICE_TYPES.Logger);
+            const { ErrorHandler } = require('../utils/errorHandler');
+            return new ErrorHandler(logger);
+        });
+
+        // Register ServerWrapper
+        this.container.registerSingleton(SERVICE_TYPES.ServerWrapper, (container) => {
+            const config = container.resolve(SERVICE_TYPES.Config) as ApplicationConfig;
+            const logger = container.resolve(SERVICE_TYPES.Logger);
+            const errorHandler = container.resolve(SERVICE_TYPES.ErrorHandler);
+            const { UWebSocketWrapper } = require('./ServerWrapper');
+            return new UWebSocketWrapper(config.server.port, logger, errorHandler);
+        });
+
+        // Register Router
+        this.container.registerSingleton(SERVICE_TYPES.Router, (container) => {
+            const logger = container.resolve(SERVICE_TYPES.Logger);
+            const { Router } = require('./routing/Router');
+            return new Router(logger);
+        });
+
+        this.logger.info('✅ Core services registered manually');
+    }
+
+    /**
+     * Perform auto-discovery of handlers and controllers
+     */
+    private async performAutoDiscovery(): Promise<void> {
+        if (!this.container) {
+            throw new Error('Container not initialized');
+        }
+
         try {
-            // Connect to the database first
-            await dbProvider.connect();
-            logger.info('✅ Database connected successfully');
+            this.logger.info('🔍 Starting auto-registration of decorated components...');
             
-            // Initialize schema if file exists
-            if (schemaPath && fs.existsSync(schemaPath)) {
-                const schemaContent = fs.readFileSync(schemaPath, 'utf-8');
-                await dbProvider.initializeSchema(schemaContent);
-                logger.info('✅ Database schema initialized successfully');
-            } else {
-                logger.warn('⚠️ No schema file found, skipping schema initialization');
-            }
+            // Use the AutoRegistration system to register decorated components
+            const { AutoRegistration } = await import('./AutoRegistration');
+            const stats = await AutoRegistration.autoRegister(this.container, {
+                continueOnError: true,
+                skipDuplicates: true
+            }, this.logger);
+            
+            this.logger.info('✅ Auto-registration completed:', stats);
+            
+            // Setup routes from discovered handlers
+            await this.setupDiscoveredRoutes();
             
         } catch (error) {
-            logger.error('❌ Database initialization failed:', { 
-                message: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : undefined
-            });
-            // Continue anyway as tables may already exist
+            this.logger.warn('Auto-registration failed:', error);
+            // Don't attempt fallback manual registration - keep it pure
         }
     }
 
     /**
-     * Auto-detect schema file location
+     * Setup routes from discovered handlers using decorators
      */
-    private detectSchemaPath(): string | null {
-        const possiblePaths = [
-            path.join(process.cwd(), 'schema.sql'),
-            path.join(process.cwd(), 'database', 'schema.sql'),
-            path.join(process.cwd(), 'db', 'schema.sql'),
-            path.join(process.cwd(), 'sql', 'schema.sql'),
-        ];
+    private async setupDiscoveredRoutes(): Promise<void> {
+        if (!this.container) return;
 
-        for (const schemaPath of possiblePaths) {
-            if (fs.existsSync(schemaPath)) {
-                return schemaPath;
-            }
+        try {
+            this.logger.info('🔗 Processing route decorators from discovered handlers...');
+            
+            // Use the AutoRegistration system to process route decorators
+            const { AutoRegistration } = await import('./AutoRegistration');
+            await AutoRegistration.processRouteDecorators(this.container, this.logger);
+            
+            this.logger.info('✅ Route decorators processed successfully');
+            
+        } catch (error) {
+            this.logger.error('Failed to process route decorators:', error);
+            // Simplified fallback: just log the error, don't try manual registration
+            this.logger.warn('Routes will not be available - auto-registration failed');
         }
+    }
 
-        return null;
+    /**
+     * Quick start with minimal configuration
+     */
+    async quickStart(): Promise<BootstrapResult> {
+        return this.start({
+            enableAutoDiscovery: true,
+            enableMetrics: true,
+            enableHealthCheck: true
+        });
     }
 
     /**
@@ -211,159 +220,61 @@ export class ApplicationBootstrap<TConfig extends BaseAppConfig = BaseAppConfig>
     }
 
     /**
-     * Get the service registry
+     * Get health check service
      */
-    getServiceRegistry(): ServiceRegistry<TConfig> {
-        return this.serviceRegistry;
-    }
-
-    /**
-     * Graceful shutdown
-     */
-    async shutdown(): Promise<void> {
-        if (this.isShuttingDown || !this.container) {
-            return;
-        }
-
-        this.isShuttingDown = true;
-
-        try {
-            const logger = this.container.resolve<Logger>(TYPES.Logger);
-            logger.info('🛑 Shutting down application...');
-
-            // Execute custom shutdown handlers first
-            for (const handler of this.shutdownHandlers) {
-                try {
-                    await handler();
-                } catch (error) {
-                    logger.error('Error in shutdown handler:', error);
-                }
-            }
-
-            // Close database connections
-            const dbProvider = this.container.resolve<DatabaseProvider>(TYPES.DatabaseProvider);
-            await dbProvider.disconnect();
-
-            logger.info('✅ Application shutdown completed');
-        } catch (error) {
-            console.error('Error during shutdown:', error);
-        }
-    }
-
-    /**
-     * Setup metrics collection
-     */
-    private setupMetrics(intervalMs?: number): void {
-        if (!this.container) {
-            return;
-        }
-
-        this.metricsService = new MetricsService(this.container);
-        
-        // Register metrics service in container
-        this.container.registerInstance('MetricsService', this.metricsService);
-
-        // Start system metrics collection
-        this.metricsService.startSystemMetricsCollection(intervalMs);
-
-        const logger = this.container.resolve<Logger>(TYPES.Logger);
-        logger.info('✅ Metrics collection enabled');
+    getHealthCheckService(): HealthCheckService | undefined {
+        return this.moduleLoader?.getHealthCheckService();
     }
 
     /**
      * Get metrics service
      */
     getMetricsService(): MetricsService | undefined {
-        return this.metricsService;
+        return this.moduleLoader?.getMetricsService();
     }
 
     /**
-     * Setup health checks
+     * Graceful shutdown
      */
-    private setupHealthChecks(): void {
-        if (!this.container) {
-            return;
+    async shutdown(): Promise<void> {
+        if (this.serverStarter) {
+            await this.serverStarter.shutdown();
         }
-
-        this.healthCheckService = new HealthCheckService(this.container);
-        
-        // Register health check service in container
-        this.container.registerInstance('HealthCheckService', this.healthCheckService);
-
-        // Add custom health checks
-        this.healthCheckService.addChecker('startup', async () => ({
-            name: 'startup',
-            status: 'pass',
-            duration: 0,
-            message: 'Application started successfully'
-        }));
-
-        const logger = this.container.resolve<Logger>(TYPES.Logger);
-        logger.info('✅ Health checks enabled');
-    }
-
-    /**
-     * Get health check service
-     */
-    getHealthCheckService(): HealthCheckService | undefined {
-        return this.healthCheckService;
-    }
-
-    /**
-     * Setup graceful shutdown handlers
-     */
-    private setupGracefulShutdown(timeoutMs: number = 5000): void {
-        const shutdown = async (signal: string) => {
-            console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
-            
-            // Set a timeout to force exit if graceful shutdown takes too long
-            const forceExitTimer = setTimeout(() => {
-                console.error('⚠️ Graceful shutdown timeout, forcing exit...');
-                process.exit(1);
-            }, timeoutMs);
-
-            try {
-                await this.shutdown();
-                clearTimeout(forceExitTimer);
-                process.exit(0);
-            } catch (error) {
-                console.error('Error during graceful shutdown:', error);
-                clearTimeout(forceExitTimer);
-                process.exit(1);
-            }
-        };
-
-        process.on('SIGINT', () => shutdown('SIGINT'));
-        process.on('SIGTERM', () => shutdown('SIGTERM'));
-        
-        // Handle uncaught exceptions and unhandled rejections
-        process.on('uncaughtException', async (error) => {
-            console.error('Uncaught Exception:', error);
-            await shutdown('UNCAUGHT_EXCEPTION');
-        });
-
-        process.on('unhandledRejection', async (reason) => {
-            console.error('Unhandled Rejection:', reason);
-            await shutdown('UNHANDLED_REJECTION');
-        });
     }
 
     /**
      * Add custom shutdown handler
      */
     onShutdown(handler: () => Promise<void>): void {
-        this.shutdownHandlers.push(handler);
+        if (this.serverStarter) {
+            this.serverStarter.onShutdown(handler);
+        } else {
+            throw new Error('Server not started yet. Call start() first.');
+        }
+    }
+
+    /**
+     * Check if shutting down
+     */
+    isShuttingDown(): boolean {
+        return this.serverStarter?.isServerShuttingDown() || false;
+    }
+
+    /**
+     * Get validated configuration
+     */
+    getConfig(): ApplicationConfig {
+        return this.config;
     }
 }
 
 /**
  * Convenience function for quick server startup
- * Perfect for simple applications
  */
-export async function startApplication<TConfig extends BaseAppConfig>(
-    config: TConfig, 
+export async function startApplication(
+    config: ApplicationConfig, 
     options: BootstrapOptions = {}
-): Promise<{ container: Container; serviceRegistry: ServiceRegistry<TConfig> }> {
+): Promise<BootstrapResult> {
     const bootstrap = new ApplicationBootstrap(config);
     return await bootstrap.start(options);
 }

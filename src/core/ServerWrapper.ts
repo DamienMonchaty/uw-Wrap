@@ -1,9 +1,38 @@
+/**
+ * UWebSocketWrapper - Refactored with SOLID principles
+ * Single Responsibility: uWebSockets.js app configuration and route registration
+ */
+
 import * as uWS from 'uWebSockets.js';
 import { HttpHandler, WebSocketHandler } from '../types';
 import { Logger } from '../utils/logger';
-import { ErrorHandler, AppError } from '../utils/errorHandler';
-import { JWTManager } from '../auth/jwtManager';
+import { ErrorHandler } from '../utils/errorHandler';
+import { JWTManager } from '../auth/JwtManager';
 
+// Import specialized managers
+import { ServerEventManager, ServerEventType } from './server/ServerEventManager';
+import { HttpHandlerWrapper, HandlerWrapperOptions } from './server/HttpHandlerWrapper';
+import { AuthenticationWrapper, AuthenticationOptions } from './server/AuthenticationWrapper';
+import { ResponseManager, ResponseOptions } from './server/ResponseManager';
+import { RequestManager, RequestManagerOptions } from './server/RequestManager';
+
+export interface UWebSocketWrapperOptions {
+    /** Handler wrapper options */
+    handlerOptions?: HandlerWrapperOptions;
+    /** Authentication options */
+    authOptions?: AuthenticationOptions;
+    /** Response manager options */
+    responseOptions?: ResponseOptions;
+    /** Request manager options */
+    requestOptions?: RequestManagerOptions;
+    /** Enable server events */
+    enableEvents?: boolean;
+}
+
+/**
+ * UWebSocket Wrapper - Refactored with Single Responsibility Principle
+ * Now delegates specific responsibilities to specialized managers
+ */
 export class UWebSocketWrapper {
     private port: number;
     private app: uWS.TemplatedApp;
@@ -11,99 +40,152 @@ export class UWebSocketWrapper {
     private errorHandler: ErrorHandler;
     private jwtManager?: JWTManager;
 
-    constructor(port: number, logger: Logger, errorHandler: ErrorHandler, jwtManager?: JWTManager) {
+    // Specialized managers
+    private eventManager?: ServerEventManager;
+    private handlerWrapper!: HttpHandlerWrapper;
+    private authWrapper?: AuthenticationWrapper;
+    private responseManager!: ResponseManager;
+    private requestManager!: RequestManager;
+
+    // Server state
+    private isStarted = false;
+    private listenSocket?: uWS.us_listen_socket;
+
+    constructor(
+        port: number, 
+        logger: Logger, 
+        errorHandler: ErrorHandler, 
+        jwtManager?: JWTManager,
+        options: UWebSocketWrapperOptions = {}
+    ) {
         this.port = port;
         this.app = uWS.App();
         this.logger = logger;
         this.errorHandler = errorHandler;
         this.jwtManager = jwtManager;
+
+        // Initialize specialized managers
+        this.initializeManagers(options);
     }
 
-    start(): Promise<void> {
+    /**
+     * Initialize specialized managers
+     */
+    private initializeManagers(options: UWebSocketWrapperOptions): void {
+        // Event manager (optional)
+        if (options.enableEvents !== false) {
+            this.eventManager = new ServerEventManager(this.logger, this.errorHandler);
+        }
+
+        // Handler wrapper
+        this.handlerWrapper = new HttpHandlerWrapper(
+            this.logger, 
+            this.errorHandler, 
+            options.handlerOptions
+        );
+
+        // Authentication wrapper (if JWT manager available)
+        if (this.jwtManager) {
+            this.authWrapper = new AuthenticationWrapper(
+                this.jwtManager,
+                this.logger,
+                this.errorHandler,
+                options.authOptions
+            );
+        }
+
+        // Response manager
+        this.responseManager = new ResponseManager(this.logger, options.responseOptions);
+
+        // Request manager
+        this.requestManager = new RequestManager(this.logger, options.requestOptions);
+    }
+
+    /**
+     * Start the server
+     */
+    async start(): Promise<void> {
+        if (this.isStarted) {
+            this.logger.warn('Server is already started');
+            return;
+        }
+
+        await this.eventManager?.emit('starting', { port: this.port });
+
         return new Promise((resolve, reject) => {
-            this.app.listen(this.port, (token: any) => {
+            this.app.listen(this.port, (token: uWS.us_listen_socket | false) => {
                 if (token) {
+                    this.listenSocket = token;
+                    this.isStarted = true;
+                    
                     this.logger.info(`🚀 Server running on port ${this.port}`);
+                    this.eventManager?.emit('started', { port: this.port });
+                    
                     resolve();
                 } else {
                     const error = new Error('Failed to start server');
                     this.logger.error('Failed to start server', { port: this.port });
+                    this.eventManager?.emit('error', { error: error.message, port: this.port });
+                    
                     reject(error);
                 }
             });
         });
     }
 
-    private wrapHandler(handler: HttpHandler): HttpHandler {
-        return (req: uWS.HttpRequest, res: uWS.HttpResponse) => {
-            let hasResponded = false;
-            
-            // Add a flag to prevent multiple responses
-            res.onAborted(() => {
-                hasResponded = true;
-            });
+    /**
+     * Stop the server
+     */
+    async stop(): Promise<void> {
+        if (!this.isStarted) {
+            this.logger.warn('Server is not started');
+            return;
+        }
 
-            try {
-                const result = handler(req, res);
-                
-                // If handler returns a promise, handle it properly
-                if (result && typeof result === 'object' && typeof result.then === 'function') {
-                    (result as Promise<void>).catch((error: Error) => {
-                        if (!hasResponded) {
-                            hasResponded = true;
-                            const { response: errorResponse, statusCode } = this.errorHandler.handleError(error, 'Async HTTP Handler');
-                            this.sendJSON(res, errorResponse, statusCode);
-                        }
-                    });
-                }
-            } catch (error) {
-                if (!hasResponded) {
-                    hasResponded = true;
-                    const { response: errorResponse, statusCode } = this.errorHandler.handleError(error as Error, 'HTTP Handler');
-                    this.sendJSON(res, errorResponse, statusCode);
-                }
+        await this.eventManager?.emit('stopping', { port: this.port });
+
+        try {
+            if (this.listenSocket) {
+                uWS.us_listen_socket_close(this.listenSocket);
+                this.listenSocket = undefined;
             }
-        };
+
+            this.isStarted = false;
+            this.logger.info(`🛑 Server stopped on port ${this.port}`);
+            await this.eventManager?.emit('stopped', { port: this.port });
+
+        } catch (error) {
+            this.logger.error('Error stopping server:', error);
+            await this.eventManager?.emit('error', { error: (error as Error).message });
+            throw error;
+        }
     }
 
-    private requireAuth(handler: HttpHandler): HttpHandler {
-        return (req: uWS.HttpRequest, res: uWS.HttpResponse) => {
-            try {
-                if (!this.jwtManager) {
-                    throw this.errorHandler.createAuthenticationError('JWT not configured');
-                }
+    /**
+     * Add HTTP handler with automatic wrapping
+     */
+    addHttpHandler(
+        method: 'get' | 'post' | 'put' | 'delete', 
+        route: string, 
+        handler: HttpHandler, 
+        requireAuth: boolean = false
+    ): void {
+        // Apply authentication if required
+        let finalHandler = handler;
+        
+        if (requireAuth && this.authWrapper) {
+            finalHandler = this.authWrapper.requireAuth(handler);
+        }
 
-                const authHeader = req.getHeader('authorization');
-                if (!authHeader) {
-                    throw this.errorHandler.createAuthenticationError('No authorization header');
-                }
+        // Wrap handler with common functionality
+        const wrappedHandler = this.handlerWrapper.wrapHandler(finalHandler);
 
-                const token = this.jwtManager.extractTokenFromHeader(authHeader);
-                const payload = this.jwtManager.verifyToken(token);
-                
-                // Add user info to request context (you might want to extend this)
-                (req as any).user = payload;
-                
-                handler(req, res);
-            } catch (error) {
-                const { response: errorResponse, statusCode } = this.errorHandler.handleError(error as Error, 'Auth Middleware');
-                res.cork(() => {
-                    res.writeStatus(`${statusCode} ${statusCode === 401 ? 'Unauthorized' : 'Internal Server Error'}`);
-                    res.writeHeader('Content-Type', 'application/json');
-                    res.end(JSON.stringify(errorResponse));
-                });
-            }
-        };
-    }
-
-    addHttpHandler(method: 'get' | 'post' | 'put' | 'delete', route: string, handler: HttpHandler, requireAuth: boolean = false): void {
-        const wrappedHandler = this.wrapHandler(requireAuth && this.jwtManager ? this.requireAuth(handler) : handler);
-
-        // Adapter to swap (req, res) -> (res, req)
+        // Create uWS adapter (swaps req/res order)
         const uwsHandler = (res: uWS.HttpResponse, req: uWS.HttpRequest) => {
             wrappedHandler(req, res);
         };
 
+        // Register with uWebSockets
         switch (method) {
             case 'get':
                 this.app.get(route, uwsHandler);
@@ -118,8 +200,32 @@ export class UWebSocketWrapper {
                 this.app.del(route, uwsHandler);
                 break;
         }
+
+        this.logger.debug(`Registered ${method.toUpperCase()} ${route}`, { requireAuth });
     }
 
+    /**
+     * Add HTTP handler with optional authentication
+     */
+    addHttpHandlerWithOptionalAuth(
+        method: 'get' | 'post' | 'put' | 'delete',
+        route: string,
+        handler: HttpHandler
+    ): void {
+        let finalHandler = handler;
+
+        // Apply optional authentication if available
+        if (this.authWrapper) {
+            finalHandler = this.authWrapper.optionalAuth(handler);
+        }
+
+        // Use existing method but with no required auth
+        this.addHttpHandler(method, route, finalHandler, false);
+    }
+
+    /**
+     * Add WebSocket handler
+     */
     addWebSocketHandler<UserData = any>(
         route: string,
         handler: WebSocketHandler,
@@ -140,7 +246,6 @@ export class UWebSocketWrapper {
             message: (ws: uWS.WebSocket<UserData>, message: ArrayBuffer, isBinary: boolean) => {
                 try {
                     if (handler.onMessage) {
-                        // Convert ArrayBuffer to Buffer for compatibility
                         const msg = Buffer.from(message);
                         handler.onMessage(ws, msg, { binary: isBinary });
                     }
@@ -152,7 +257,6 @@ export class UWebSocketWrapper {
             close: (ws: uWS.WebSocket<UserData>, code: number, message: ArrayBuffer) => {
                 try {
                     if (handler.onClose) {
-                        // Convert ArrayBuffer to string for compatibility
                         const msg = Buffer.from(message).toString();
                         handler.onClose(ws, code, msg);
                     }
@@ -161,52 +265,124 @@ export class UWebSocketWrapper {
                 }
             },
         });
+
+        this.logger.debug(`Registered WebSocket ${route}`);
     }
 
-    // Helper method to send JSON responses
+    // ============================================================================
+    // DELEGATED METHODS - Forward to specialized managers
+    // ============================================================================
+
+    /**
+     * Send JSON response (delegates to ResponseManager)
+     */
     sendJSON(res: uWS.HttpResponse, data: any, statusCode: number = 200): void {
-        // Check if response is still valid before sending
-        if (res.aborted) {
-            return; // Don't try to send if response is aborted
-        }
-        
-        try {
-            res.cork(() => {
-                if (!res.aborted) {
-                    res.writeStatus(`${statusCode}`);
-                    res.writeHeader('Content-Type', 'application/json');
-                    res.end(JSON.stringify(data));
-                }
-            });
-        } catch (error) {
-            // Log the error but don't throw - response might be closed
-            this.logger.warn('Failed to send JSON response:', { error: (error as Error).message, statusCode });
-        }
+        this.responseManager.sendJSON(res, data, { statusCode });
     }
 
-    // Helper method to read request body
+    /**
+     * Read request body (delegates to RequestManager)
+     */
     readBody(res: uWS.HttpResponse): Promise<string> {
-        return new Promise((resolve, reject) => {
-            let buffer = '';
-            let aborted = false;
-            
-            res.onAborted(() => {
-                aborted = true;
-                reject(new Error('Request aborted'));
-            });
-            
-            res.onData((chunk, isLast) => {
-                if (aborted) return;
-                
-                try {
-                    buffer += Buffer.from(chunk).toString();
-                    if (isLast) {
-                        resolve(buffer);
-                    }
-                } catch (error) {
-                    reject(new Error('Failed to read request body: ' + (error as Error).message));
-                }
-            });
-        });
+        return this.requestManager.readBody(res);
+    }
+
+    /**
+     * Parse request body (delegates to RequestManager)
+     */
+    async parseBody(res: uWS.HttpResponse, req: uWS.HttpRequest) {
+        return this.requestManager.parseBody(res, req);
+    }
+
+    /**
+     * Get query parameters (delegates to RequestManager)
+     */
+    getQueryParams(req: uWS.HttpRequest): Record<string, string> {
+        return this.requestManager.getQueryParams(req);
+    }
+
+    /**
+     * Get request headers (delegates to RequestManager)
+     */
+    getHeaders(req: uWS.HttpRequest): Record<string, string> {
+        return this.requestManager.getHeaders(req);
+    }
+
+    /**
+     * Get client IP (delegates to RequestManager)
+     */
+    getClientIP(req: uWS.HttpRequest): string {
+        return this.requestManager.getClientIP(req);
+    }
+
+    // ============================================================================
+    // EVENT MANAGEMENT
+    // ============================================================================
+
+    /**
+     * Add server event listener
+     */
+    on(eventType: ServerEventType, handler: (event: ServerEventType, data?: any) => void | Promise<void>): void {
+        this.eventManager?.on(eventType, handler);
+    }
+
+    /**
+     * Remove server event listener
+     */
+    off(eventType: ServerEventType, handler: (event: ServerEventType, data?: any) => void | Promise<void>): void {
+        this.eventManager?.off(eventType, handler);
+    }
+
+    // ============================================================================
+    // GETTERS AND STATUS
+    // ============================================================================
+
+    /**
+     * Check if server is started
+     */
+    isServerStarted(): boolean {
+        return this.isStarted;
+    }
+
+    /**
+     * Get server port
+     */
+    getPort(): number {
+        return this.port;
+    }
+
+    /**
+     * Get response manager (for advanced usage)
+     */
+    getResponseManager(): ResponseManager {
+        return this.responseManager;
+    }
+
+    /**
+     * Get request manager (for advanced usage)
+     */
+    getRequestManager(): RequestManager {
+        return this.requestManager;
+    }
+
+    /**
+     * Get handler wrapper (for configuration)
+     */
+    getHandlerWrapper(): HttpHandlerWrapper {
+        return this.handlerWrapper;
+    }
+
+    /**
+     * Get authentication wrapper (if available)
+     */
+    getAuthWrapper(): AuthenticationWrapper | undefined {
+        return this.authWrapper;
+    }
+
+    /**
+     * Get event manager (if available)
+     */
+    getEventManager(): ServerEventManager | undefined {
+        return this.eventManager;
     }
 }

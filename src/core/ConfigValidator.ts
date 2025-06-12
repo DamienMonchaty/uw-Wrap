@@ -1,337 +1,238 @@
 /**
- * Configuration Validator
- * Validates application configuration at startup
+ * Configuration Validator - Modern version
+ * Uses the new ApplicationConfig system exclusively
  */
 
-import { BaseAppConfig } from './ServiceRegistry';
-import { Logger } from '../utils/logger';
+import { ApplicationConfig, validateApplicationConfig } from './container/ApplicationConfig';
+
+export interface ConfigValidatorOptions {
+    /** Enable detailed logging */
+    enableLogging?: boolean;
+    /** Custom validation rules */
+    customRules?: ValidationRule[];
+}
 
 export interface ValidationResult {
     valid: boolean;
+    config: ApplicationConfig;
     errors: string[];
     warnings: string[];
 }
 
-export interface ValidationRule<T = any> {
+export interface ValidationRule {
     path: string;
     required?: boolean;
-    type?: 'string' | 'number' | 'boolean' | 'object' | 'array';
-    validate?: (value: T) => boolean | string;
-    default?: T;
-    description?: string;
+    type?: 'string' | 'number' | 'boolean' | 'object';
+    default?: any;
+    validate?: (value: any) => boolean;
+    message?: string;
 }
 
+/**
+ * Modern Configuration Validator
+ * Single responsibility: Application configuration validation
+ */
 export class ConfigValidator {
-    private rules: ValidationRule[] = [];
-    private logger?: Logger;
+    private enableLogging: boolean;
+    private customRules: ValidationRule[];
 
-    constructor(logger?: Logger) {
-        this.logger = logger;
-        this.setupDefaultRules();
+    constructor(options: ConfigValidatorOptions = {}) {
+        this.enableLogging = options.enableLogging !== false;
+        this.customRules = options.customRules || [];
     }
 
     /**
-     * Add validation rule
+     * Validate and apply defaults to configuration
      */
-    addRule(rule: ValidationRule): void {
-        this.rules.push(rule);
+    async validateAndApplyDefaults(config: unknown): Promise<ValidationResult> {
+        try {
+            // Use the modern validation system
+            const validatedConfig = await validateApplicationConfig(config);
+            
+            // Apply custom validation rules if any
+            const customValidation = this.applyCustomRules(validatedConfig);
+            
+            const result = {
+                valid: customValidation.errors.length === 0,
+                config: validatedConfig,
+                errors: customValidation.errors,
+                warnings: customValidation.warnings
+            };
+
+            if (this.enableLogging) {
+                if (!result.valid) {
+                    console.error('❌ Configuration validation errors:', result.errors);
+                }
+                if (result.warnings.length > 0) {
+                    console.warn('⚠️ Configuration validation warnings:', result.warnings);
+                }
+            }
+
+            return result;
+        } catch (error) {
+            if (this.enableLogging) {
+                console.error('❌ Configuration validation failed:', error);
+            }
+            
+            throw new Error(`Configuration validation failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     /**
-     * Setup default validation rules for BaseAppConfig
+     * Synchronous validation for compatibility
      */
-    private setupDefaultRules(): void {
-        // Basic required fields
-        this.addRule({
-            path: 'port',
-            required: true,
-            type: 'number',
-            validate: (value: number) => value > 0 && value <= 65535,
-            description: 'Server port number (1-65535)'
-        });
+    validateSync(config: unknown): ValidationResult {
+        try {
+            // Basic synchronous validation
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            
+            // Type check
+            if (!config || typeof config !== 'object') {
+                errors.push('Configuration must be an object');
+                return {
+                    valid: false,
+                    config: config as ApplicationConfig,
+                    errors,
+                    warnings
+                };
+            }
 
-        this.addRule({
-            path: 'jwtSecret',
-            required: true,
-            type: 'string',
-            validate: (value: string) => value.length >= 32 || 'JWT secret must be at least 32 characters',
-            description: 'JWT secret key (minimum 32 characters)'
-        });
+            const configObj = config as any;
 
-        this.addRule({
-            path: 'jwtExpiresIn',
-            required: true,
-            type: 'string',
-            validate: (value: string) => /^\d+[hdms]$/.test(value) || 'Invalid time format (use: 1h, 30m, 24h, etc.)',
-            description: 'JWT expiration time (e.g., "1h", "30m", "24h")'
-        });
+            // Basic required field validation
+            if (!configObj.server?.port) {
+                if (typeof configObj.port === 'number') {
+                    // Migrate legacy format
+                    configObj.server = { ...configObj.server, port: configObj.port };
+                    warnings.push('Legacy port configuration migrated to server.port');
+                } else {
+                    errors.push('server.port is required');
+                }
+            }
 
-        // Database configuration
-        this.addRule({
-            path: 'database.type',
-            required: true,
-            type: 'string',
-            validate: (value: string) => ['sqlite', 'mysql'].includes(value),
-            description: 'Database type (sqlite or mysql)'
-        });
+            if (!configObj.auth?.jwtSecret) {
+                if (typeof configObj.jwtSecret === 'string') {
+                    // Migrate legacy format
+                    configObj.auth = { ...configObj.auth, jwtSecret: configObj.jwtSecret };
+                    warnings.push('Legacy jwtSecret configuration migrated to auth.jwtSecret');
+                } else {
+                    errors.push('auth.jwtSecret is required');
+                }
+            }
 
-        // SQLite specific
-        this.addRule({
-            path: 'database.sqlite.file',
-            required: false, // Only required if type is sqlite
-            type: 'string',
-            validate: (value: string) => value.endsWith('.sqlite') || value.endsWith('.db'),
-            description: 'SQLite database file path'
-        });
+            if (!configObj.database) {
+                errors.push('database configuration is required');
+            }
 
-        // MySQL specific
-        this.addRule({
-            path: 'database.mysql.host',
-            required: false, // Only required if type is mysql
-            type: 'string',
-            description: 'MySQL host'
-        });
+            // Apply custom rules
+            const customValidation = this.applyCustomRules(configObj);
+            errors.push(...customValidation.errors);
+            warnings.push(...customValidation.warnings);
 
-        this.addRule({
-            path: 'database.mysql.port',
-            required: false,
-            type: 'number',
-            validate: (value: number) => value > 0 && value <= 65535,
-            description: 'MySQL port number'
-        });
-
-        this.addRule({
-            path: 'database.mysql.user',
-            required: false,
-            type: 'string',
-            description: 'MySQL username'
-        });
-
-        this.addRule({
-            path: 'database.mysql.password',
-            required: false,
-            type: 'string',
-            description: 'MySQL password'
-        });
-
-        this.addRule({
-            path: 'database.mysql.database',
-            required: false,
-            type: 'string',
-            description: 'MySQL database name'
-        });
+            return {
+                valid: errors.length === 0,
+                config: configObj as ApplicationConfig,
+                errors,
+                warnings
+            };
+        } catch (error) {
+            throw new Error(`Synchronous validation failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     /**
-     * Validate configuration
+     * Apply custom validation rules
      */
-    validate(config: BaseAppConfig): ValidationResult {
+    private applyCustomRules(config: any): { errors: string[]; warnings: string[] } {
         const errors: string[] = [];
         const warnings: string[] = [];
 
-        this.logger?.debug('Validating configuration...', { rules: this.rules.length });
-
-        for (const rule of this.rules) {
+        for (const rule of this.customRules) {
             try {
                 const value = this.getNestedValue(config, rule.path);
                 
-                // Check if required
-                if (rule.required && (value === undefined || value === null)) {
-                    // Special case for database-specific rules
-                    if (this.isDatabaseSpecificRule(rule, config)) {
-                        continue;
+                if (value === undefined) {
+                    if (rule.required) {
+                        errors.push(rule.message || `${rule.path} is required`);
+                    } else if (rule.default !== undefined) {
+                        this.setNestedValue(config, rule.path, rule.default);
+                        warnings.push(`Applied default value for ${rule.path}`);
                     }
-                    errors.push(`Missing required field: ${rule.path}${rule.description ? ` (${rule.description})` : ''}`);
-                    continue;
-                }
-
-                // Skip validation if value is undefined and not required
-                if (value === undefined || value === null) {
-                    continue;
-                }
-
-                // Type validation
-                if (rule.type && !this.validateType(value, rule.type)) {
-                    errors.push(`Invalid type for ${rule.path}: expected ${rule.type}, got ${typeof value}`);
-                    continue;
-                }
-
-                // Custom validation
-                if (rule.validate) {
-                    const result = rule.validate(value);
-                    if (result === false) {
-                        errors.push(`Validation failed for ${rule.path}`);
-                    } else if (typeof result === 'string') {
-                        errors.push(`${rule.path}: ${result}`);
+                } else {
+                    // Type validation
+                    if (rule.type && typeof value !== rule.type) {
+                        if (rule.type === 'number' && !isNaN(Number(value))) {
+                            this.setNestedValue(config, rule.path, Number(value));
+                            warnings.push(`Converted ${rule.path} to number`);
+                        } else {
+                            errors.push(rule.message || `${rule.path} must be of type ${rule.type}`);
+                        }
+                    }
+                    
+                    // Custom validation
+                    if (rule.validate && !rule.validate(value)) {
+                        errors.push(rule.message || `${rule.path} validation failed`);
                     }
                 }
             } catch (error) {
-                errors.push(`Error validating ${rule.path}: ${error instanceof Error ? error.message : String(error)}`);
+                errors.push(`Validation error for ${rule.path}: ${error instanceof Error ? error.message : String(error)}`);
             }
         }
 
-        // Add warnings for common issues
-        this.addCommonWarnings(config, warnings);
-
-        const valid = errors.length === 0;
-
-        this.logger?.debug('Configuration validation completed', {
-            valid,
-            errors: errors.length,
-            warnings: warnings.length
-        });
-
-        if (!valid && this.logger) {
-            this.logger.error('Configuration validation failed:', errors);
-        }
-
-        if (warnings.length > 0 && this.logger) {
-            this.logger.warn('Configuration warnings:', warnings);
-        }
-
-        return { valid, errors, warnings };
+        return { errors, warnings };
     }
 
     /**
-     * Validate and apply defaults
+     * Create validation report
      */
-    validateAndApplyDefaults(config: BaseAppConfig): { config: BaseAppConfig; validation: ValidationResult } {
-        // Apply defaults first
-        const configWithDefaults = this.applyDefaults(config);
+    createReport(validation: ValidationResult): string {
+        const report = [];
         
-        // Then validate
-        const validation = this.validate(configWithDefaults);
+        report.push('=== Configuration Validation Report ===');
+        report.push(`Status: ${validation.valid ? '✅ VALID' : '❌ INVALID'}`);
         
-        return { config: configWithDefaults, validation };
+        if (validation.errors.length > 0) {
+            report.push('\n🚫 Errors:');
+            validation.errors.forEach(error => report.push(`  - ${error}`));
+        }
+        
+        if (validation.warnings.length > 0) {
+            report.push('\n⚠️ Warnings:');
+            validation.warnings.forEach(warning => report.push(`  - ${warning}`));
+        }
+        
+        report.push('=====================================');
+        
+        return report.join('\n');
     }
 
     /**
-     * Apply default values
+     * Add custom validation rule
      */
-    private applyDefaults(config: BaseAppConfig): BaseAppConfig {
-        const result = { ...config };
-        
-        for (const rule of this.rules) {
-            if (rule.default !== undefined && this.getNestedValue(result, rule.path) === undefined) {
-                this.setNestedValue(result, rule.path, rule.default);
-            }
-        }
-        
-        return result;
+    addRule(rule: ValidationRule): void {
+        this.customRules.push(rule);
     }
 
     /**
-     * Check if rule is database-specific and should be skipped
-     */
-    private isDatabaseSpecificRule(rule: ValidationRule, config: BaseAppConfig): boolean {
-        if (rule.path.startsWith('database.sqlite.') && config.database.type !== 'sqlite') {
-            return true;
-        }
-        if (rule.path.startsWith('database.mysql.') && config.database.type !== 'mysql') {
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * Add common configuration warnings
-     */
-    private addCommonWarnings(config: BaseAppConfig, warnings: string[]): void {
-        // Environment-specific warnings
-        const isProduction = process.env.NODE_ENV === 'production';
-        
-        if (isProduction) {
-            if (config.jwtSecret.length < 64) {
-                warnings.push('JWT secret should be at least 64 characters in production');
-            }
-            
-            if (config.database.type === 'sqlite') {
-                warnings.push('SQLite is not recommended for production use');
-            }
-        }
-
-        // Security warnings
-        if (config.jwtSecret === 'your-secret-key' || config.jwtSecret === 'default-secret') {
-            warnings.push('Using default JWT secret - change this for security');
-        }
-
-        // Performance warnings
-        if (config.database.type === 'mysql' && config.database.mysql?.connectionLimit && config.database.mysql.connectionLimit < 5) {
-            warnings.push('MySQL connection limit is very low, consider increasing for better performance');
-        }
-    }
-
-    /**
-     * Get nested object value by path
+     * Get nested object value
      */
     private getNestedValue(obj: any, path: string): any {
         return path.split('.').reduce((current, key) => current?.[key], obj);
     }
 
     /**
-     * Set nested object value by path
+     * Set nested object value
      */
     private setNestedValue(obj: any, path: string, value: any): void {
         const keys = path.split('.');
         const lastKey = keys.pop()!;
         const target = keys.reduce((current, key) => {
-            if (!current[key]) current[key] = {};
+            if (!(key in current)) {
+                current[key] = {};
+            }
             return current[key];
         }, obj);
         target[lastKey] = value;
-    }
-
-    /**
-     * Validate value type
-     */
-    private validateType(value: any, expectedType: string): boolean {
-        switch (expectedType) {
-            case 'string':
-                return typeof value === 'string';
-            case 'number':
-                return typeof value === 'number' && !isNaN(value);
-            case 'boolean':
-                return typeof value === 'boolean';
-            case 'object':
-                return typeof value === 'object' && value !== null && !Array.isArray(value);
-            case 'array':
-                return Array.isArray(value);
-            default:
-                return true;
-        }
-    }
-
-    /**
-     * Create detailed validation report
-     */
-    createReport(validation: ValidationResult): string {
-        const lines: string[] = [];
-        
-        lines.push('📋 Configuration Validation Report');
-        lines.push('═'.repeat(40));
-        
-        if (validation.valid) {
-            lines.push('✅ Configuration is valid');
-        } else {
-            lines.push('❌ Configuration validation failed');
-        }
-        
-        if (validation.errors.length > 0) {
-            lines.push('');
-            lines.push('🚨 Errors:');
-            validation.errors.forEach((error, i) => {
-                lines.push(`  ${i + 1}. ${error}`);
-            });
-        }
-        
-        if (validation.warnings.length > 0) {
-            lines.push('');
-            lines.push('⚠️  Warnings:');
-            validation.warnings.forEach((warning, i) => {
-                lines.push(`  ${i + 1}. ${warning}`);
-            });
-        }
-        
-        return lines.join('\n');
     }
 }

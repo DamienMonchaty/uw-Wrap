@@ -13,8 +13,10 @@ export class JWTManager {
 
     generateToken(payload: JWTPayload): string {
         try {
-            // Cast to any to handle jsonwebtoken type issues
-            const options: any = { expiresIn: this.expiresIn };
+            // Use compatible typing for jsonwebtoken options
+            const options = { 
+                expiresIn: this.expiresIn as any
+            };
             return jwt.sign(payload, this.secretKey, options);
         } catch (error) {
             const details: ErrorDetails = {

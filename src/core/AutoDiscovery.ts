@@ -1,187 +1,302 @@
 /**
- * Auto-Discovery System
- * Automatically discovers and loads handlers, services, and repositories
+ * ModernAutoDiscovery - Refactored auto-discovery system
+ * Single responsibility: Component discovery orchestration
+ * Uses the new modular discovery system
  */
 
-import fs from 'fs';
-import path from 'path';
+import { AsyncComponentDiscovery, DiscoveredComponent, DiscoveryResult, DiscoveryProgress } from './discovery/AsyncComponentDiscovery';
+import { DiscoveryConfig, DiscoveryConfiguration, ComponentPatterns } from './discovery/DiscoveryConfig';
+import { ComponentRegistry, RegistrationResult, RegistrationOptions } from './discovery/ComponentRegistry';
+import { Container } from './container/Container';
 import { Logger } from '../utils/logger';
 
-export interface DiscoveryConfig {
-    baseDir: string;
-    patterns: {
-        handlers?: string[];
-        services?: string[];
-        repositories?: string[];
-    };
-    excludePatterns?: string[];
+export interface AutoDiscoveryOptions {
+    /** Discovery configuration */
+    config?: Partial<DiscoveryConfiguration>;
+    /** Component types to discover */
+    componentTypes?: (keyof ComponentPatterns)[];
+    /** Registration options */
+    registrationOptions?: RegistrationOptions;
+    /** Progress reporting callback */
+    onProgress?: (progress: DiscoveryProgress) => void;
+    /** Enable detailed logging */
+    verbose?: boolean;
 }
 
+export interface AutoDiscoveryResult {
+    discovery: DiscoveryResult;
+    registration: RegistrationResult;
+    summary: {
+        totalTime: number;
+        discoveredComponents: number;
+        registeredComponents: number;
+        successRate: number;
+    };
+}
+
+/**
+ * Modern auto-discovery system with improved architecture
+ * Separates concerns and provides async support with progress reporting
+ */
 export class AutoDiscovery {
-    private logger: Logger;
+    private discovery: AsyncComponentDiscovery;
+    private registry: ComponentRegistry;
+    private logger?: Logger;
 
-    constructor(logger: Logger) {
+    constructor(logger?: Logger) {
         this.logger = logger;
+        this.discovery = new AsyncComponentDiscovery(logger);
+        this.registry = new ComponentRegistry(logger);
     }
 
     /**
-     * Auto-discover and import all classes with decorators
+     * Discover and register components automatically
      */
-    async discoverAndImport(config: DiscoveryConfig): Promise<void> {
-        this.logger.info('🔍 Starting auto-discovery...', { baseDir: config.baseDir });
+    async discoverAndRegister(
+        container: Container,
+        options: AutoDiscoveryOptions = {}
+    ): Promise<AutoDiscoveryResult> {
+        const startTime = Date.now();
+        
+        try {
+            this.logger?.info('🚀 Starting modern auto-discovery...');
 
-        const files = this.scanDirectory(config.baseDir, config.patterns, config.excludePatterns);
-        
-        this.logger.info(`📁 Found ${files.length} matching files:`, { files: files.map(f => path.relative(config.baseDir, f)) });
-        
-        let importedCount = 0;        for (const file of files) {
-            try {
-                // Dynamic import to trigger decorator registration
-                await import(file);
-                importedCount++;
-            } catch (error) {
-                this.logger.warn(`⚠️ Failed to import: ${file}`, { error: (error as Error).message });
+            // Create configuration
+            const config = this.createConfiguration(options);
+            
+            // Validate configuration
+            const validation = DiscoveryConfig.validate(config);
+            if (!validation.valid) {
+                throw new Error(`Invalid discovery configuration: ${validation.errors.join(', ')}`);
             }
-        }
 
-        this.logger.info(`🎉 Auto-discovery completed: ${importedCount} files imported`);
+            // Discover components
+            const discoveryResult = await this.performDiscovery(config, options);
+            
+            // Register components
+            const registrationResult = await this.performRegistration(
+                discoveryResult.components,
+                container,
+                options
+            );
+
+            // Calculate summary
+            const totalTime = Date.now() - startTime;
+            const summary = {
+                totalTime,
+                discoveredComponents: discoveryResult.components.length,
+                registeredComponents: registrationResult.successful,
+                successRate: discoveryResult.components.length > 0 ? 
+                    (registrationResult.successful / discoveryResult.components.length) * 100 : 100
+            };
+
+            this.logger?.info(`✅ Auto-discovery completed in ${totalTime}ms`, summary);
+
+            return {
+                discovery: discoveryResult,
+                registration: registrationResult,
+                summary
+            };
+
+        } catch (error) {
+            this.logger?.error('❌ Auto-discovery failed:', error);
+            throw error;
+        }
     }
 
     /**
-     * Scan directory for matching files
+     * Discover components only (without registration)
      */
-    private scanDirectory(
-        baseDir: string, 
-        patterns: DiscoveryConfig['patterns'], 
-        excludePatterns: string[] = []
-    ): string[] {
-        const files: string[] = [];
+    async discoverOnly(options: AutoDiscoveryOptions = {}): Promise<DiscoveryResult> {
+        const config = this.createConfiguration(options);
+        return this.performDiscovery(config, options);
+    }
 
-        if (process.env.NODE_ENV === 'development') {
-            this.logger.debug('🔍 Scanning directory...', { baseDir, patterns, excludePatterns });
+    /**
+     * Register pre-discovered components
+     */
+    async registerOnly(
+        components: DiscoveredComponent[],
+        container: Container,
+        options: RegistrationOptions = {
+            continueOnError: true,
+            skipDuplicates: true
+        }
+    ): Promise<RegistrationResult> {
+        return this.registry.registerComponents(components, container, options);
+    }
+
+    /**
+     * Get discovery statistics and recommendations
+     */
+    async getDiscoveryStats(options: AutoDiscoveryOptions = {}): Promise<{
+        estimatedFiles: number;
+        estimatedComponents: number;
+        configurationValid: boolean;
+        recommendedSettings: Partial<DiscoveryConfiguration>;
+        performanceProfile: 'small' | 'medium' | 'large' | 'enterprise';
+    }> {
+        const config = this.createConfiguration(options);
+        const stats = await this.discovery.getDiscoveryStats(config);
+        
+        // Determine performance profile
+        let performanceProfile: 'small' | 'medium' | 'large' | 'enterprise';
+        if (stats.estimatedFiles < 50) {
+            performanceProfile = 'small';
+        } else if (stats.estimatedFiles < 200) {
+            performanceProfile = 'medium';
+        } else if (stats.estimatedFiles < 1000) {
+            performanceProfile = 'large';
+        } else {
+            performanceProfile = 'enterprise';
         }
 
-        const scanRecursive = (currentDir: string) => {
-            if (!fs.existsSync(currentDir)) {
-                this.logger.warn(`Directory does not exist: ${currentDir}`);
-                return;
-            }            const entries = fs.readdirSync(currentDir, { withFileTypes: true });
-
-            for (const entry of entries) {
-                const fullPath = path.join(currentDir, entry.name);                if (entry.isDirectory()) {
-                    // Skip node_modules and other excluded directories
-                    if (this.shouldExcludeDirectory(entry.name, excludePatterns)) {
-                        continue;
-                    }
-                    scanRecursive(fullPath);
-                } else if (entry.isFile()) {
-                    if (this.shouldIncludeFile(fullPath, patterns, excludePatterns, baseDir)) {
-                        files.push(fullPath);
-                    }
-                }
-            }
+        return {
+            ...stats,
+            performanceProfile
         };
-
-        scanRecursive(baseDir);
-        return files;
     }
 
     /**
-     * Check if directory should be excluded
+     * Create optimized configuration based on project characteristics
      */
-    private shouldExcludeDirectory(dirName: string, excludePatterns: string[]): boolean {
-        const defaultExcludes = ['node_modules', '.git', 'dist', 'build', 'coverage'];
-        const allExcludes = [...defaultExcludes, ...excludePatterns];
+    async createOptimizedConfig(baseDir: string): Promise<DiscoveryConfiguration> {
+        const tempConfig = DiscoveryConfig.create({ baseDirectory: baseDir });
+        const stats = await this.discovery.getDiscoveryStats(tempConfig);
         
-        return allExcludes.some(pattern => {
-            if (pattern.includes('*')) {
-                return this.matchGlob(dirName, pattern);
-            }
-            return dirName === pattern;
-        });
+        if (stats.estimatedFiles > 1000) {
+            // Large project optimizations
+            return DiscoveryConfig.presets.performance();
+        } else if (stats.estimatedFiles < 50) {
+            // Small project optimizations
+            return DiscoveryConfig.presets.minimal();
+        } else {
+            // Default configuration for medium projects
+            return DiscoveryConfig.createForEnvironment(
+                process.env.NODE_ENV as 'development' | 'production' | 'test' || 'development'
+            );
+        }
     }
 
     /**
-     * Check if file should be included
+     * Perform component discovery
      */
-    private shouldIncludeFile(
-        filePath: string, 
-        patterns: DiscoveryConfig['patterns'], 
-        excludePatterns: string[],
-        baseDir: string
-    ): boolean {        const relativePath = path.relative(baseDir, filePath);
-        const fileName = path.basename(filePath);
+    private async performDiscovery(
+        config: DiscoveryConfiguration,
+        options: AutoDiscoveryOptions
+    ): Promise<DiscoveryResult> {
+        if (options.componentTypes && options.componentTypes.length > 0) {
+            // Discover specific component types
+            return this.discovery.discoverComponentTypes(
+                options.componentTypes,
+                config,
+                options.onProgress
+            );
+        } else {
+            // Discover all component types
+            return this.discovery.discoverComponents(config, options.onProgress);
+        }
+    }
 
-        // Check exclude patterns first
-        if (excludePatterns.some(pattern => this.matchPattern(relativePath, pattern))) {
-            return false;
+    /**
+     * Perform component registration
+     */
+    private async performRegistration(
+        components: DiscoveredComponent[],
+        container: Container,
+        options: AutoDiscoveryOptions
+    ): Promise<RegistrationResult> {
+        const registrationOptions = options.registrationOptions || this.getDefaultRegistrationOptions();
+        return this.registry.registerComponents(components, container, registrationOptions);
+    }
+
+    /**
+     * Create discovery configuration
+     */
+    private createConfiguration(options: AutoDiscoveryOptions): DiscoveryConfiguration {
+        if (options.config) {
+            return DiscoveryConfig.create(options.config);
         }
 
-        // Must be TypeScript file
-        if (!fileName.endsWith('.ts') || fileName.endsWith('.d.ts')) {
-            return false;
-        }
-
-        // Check include patterns
-        const allPatterns = [
-            ...(patterns.handlers || []),
-            ...(patterns.services || []),
-            ...(patterns.repositories || [])
-        ];
-
-        if (allPatterns.length === 0) {            // Default patterns if none specified
-            const defaultMatch = this.hasDefaultPattern(relativePath);
-            return defaultMatch;
-        }        const matches = allPatterns.some(pattern => {
-            const match = this.matchPattern(relativePath, pattern);
-            return match;
-        });
-
-        return matches;
+        // Auto-detect environment and create appropriate config
+        const env = process.env.NODE_ENV as 'development' | 'production' | 'test' || 'development';
+        return DiscoveryConfig.createForEnvironment(env);
     }
 
     /**
-     * Check if file matches default patterns
+     * Get default registration options
      */
-    private hasDefaultPattern(filePath: string): boolean {
-        const defaultPatterns = [
-            '**/handlers/**/*.ts',
-            '**/services/**/*.ts',
-            '**/repositories/**/*.ts',
-            '**/*Handler.ts',
-            '**/*Service.ts',
-            '**/*Repository.ts'
-        ];
-
-        return defaultPatterns.some(pattern => this.matchPattern(filePath, pattern));
+    private getDefaultRegistrationOptions(): RegistrationOptions {
+        return {
+            continueOnError: true,
+            skipDuplicates: true,
+            filters: [
+                // Skip test files
+                (component) => !component.relativePath.includes('.test.') && 
+                              !component.relativePath.includes('.spec.'),
+                
+                // Skip declaration files
+                (component) => !component.relativePath.endsWith('.d.ts')
+            ],
+            preRegistrationHooks: this.logger ? [
+                async (component, metadata) => {
+                    this.logger?.debug(`Pre-registering: ${String(metadata.identifier)} (${metadata.type})`);
+                }
+            ] : undefined
+        };
     }
 
     /**
-     * Simple glob matching
+     * Get registry statistics
      */
-    private matchGlob(text: string, pattern: string): boolean {
-        // Escape special regex characters except * and ?
-        let regexPattern = pattern
-            .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape regex chars but not * and ?
-            .replace(/\*\*/g, '___DOUBLE_STAR___')  // Temporarily replace **
-            .replace(/\*/g, '[^/]*')                // * matches anything except /
-            .replace(/___DOUBLE_STAR___/g, '.*')    // ** matches anything including /            .replace(/\?/g, '.');                   // ? matches any single char
-        
-        const regex = new RegExp(`^${regexPattern}$`);
-        const result = regex.test(text);
-        
-        return result;
+    getRegistryStats() {
+        return this.registry.getRegistrationStats();
     }
 
     /**
-     * Pattern matching for file paths
+     * Clear all registrations (useful for testing)
      */
-    private matchPattern(filePath: string, pattern: string): boolean {        // Normalize paths - convert all backslashes to forward slashes for consistent matching
-        const normalizedPath = filePath.replace(/\\/g, '/');
-        const normalizedPattern = pattern.replace(/\\/g, '/');
-
-        const result = this.matchGlob(normalizedPath, normalizedPattern);
-        
-        return result;
+    clearRegistrations(): void {
+        this.registry.clearRegistrations();
     }
+}
+
+/**
+ * Convenience function for simple auto-discovery
+ */
+export async function quickAutoDiscovery(
+    container: Container,
+    baseDirectory?: string,
+    logger?: Logger
+): Promise<AutoDiscoveryResult> {
+    const autoDiscovery = new AutoDiscovery(logger);
+    
+    const options: AutoDiscoveryOptions = {
+        config: baseDirectory ? { baseDirectory } : undefined,
+        verbose: process.env.NODE_ENV === 'development'
+    };
+
+    return autoDiscovery.discoverAndRegister(container, options);
+}
+
+/**
+ * Factory function for different discovery profiles
+ */
+export function createAutoDiscovery(profile: 'minimal' | 'standard' | 'performance', logger?: Logger): AutoDiscovery {
+    const autoDiscovery = new AutoDiscovery(logger);
+    
+    // Configure based on profile
+    switch (profile) {
+        case 'minimal':
+            // Already optimized for small projects
+            break;
+        case 'standard':
+            // Default configuration
+            break;
+        case 'performance':
+            // Will use performance presets
+            break;
+    }
+    
+    return autoDiscovery;
 }

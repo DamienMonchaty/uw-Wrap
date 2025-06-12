@@ -1,11 +1,14 @@
 import { UWebSocketWrapper } from './ServerWrapper';
 import { Logger } from '../utils/logger';
 import { ErrorHandler } from '../utils/errorHandler';
-import { HttpRequest, HttpResponse, EnhancedHttpRequest } from '../types/uws-types';
+import { HttpHandlerUtils } from '../utils/handlers';
+import { HttpRequest, HttpResponse } from '../types/uws-types';
+import { MiddlewareContext } from '../middleware/AuthenticationMiddleware';
 
 /**
- * Base handler class with common functionality for route handling
- * This provides a foundation for creating organized, modular route handlers
+ * Base handler class with modern architecture
+ * Single Responsibility: Base functionality for HTTP handlers
+ * All deprecated methods have been removed
  */
 export abstract class HttpHandler {
     protected server: UWebSocketWrapper;
@@ -23,174 +26,170 @@ export abstract class HttpHandler {
     }
 
     /**
-     * Register all routes for this handler
-     * This method must be implemented by each handler to define its routes
+     * Modern handler method for use with new Router system
+     * Uses MiddlewareContext for cleaner interface
      */
-    abstract registerRoutes(): void;
+    protected async handleWithContext(
+        context: MiddlewareContext,
+        handler: (context: MiddlewareContext) => Promise<void>
+    ): Promise<void> {
+        try {
+            await handler(context);
+        } catch (error) {
+            const requestId = context.requestId || this.generateRequestId();
+            const { response: errorResponse, statusCode } = this.errorHandler.handleError(
+                error as Error, 
+                'HttpHandler', 
+                requestId
+            );
+            this.server.sendJSON(context.res as unknown as HttpResponse, errorResponse, statusCode);
+        }
+    }
+
+    // =============================================================================
+    // MODERN UTILITY METHODS - Using HttpHandlerUtils
+    // =============================================================================
 
     /**
-     * Helper method to handle async route errors consistently
-     * Wraps async route handlers with try-catch and proper error handling
+     * Get parsed JSON body from request
+     * Uses HttpHandlerUtils for consistent parsing
      */
-    protected async handleAsync(
-        req: any,
-        res: any,
-        handler: (req: any, res: any) => Promise<void>,
-        context: string
-    ): Promise<void> {
-        // Generate request ID for tracking
-        const requestId = this.generateRequestId();
-        
-        try {
-            await handler(req, res);
-        } catch (error) {
-            const { response: errorResponse, statusCode } = this.errorHandler.handleError(error as Error, context, requestId);
-            
-            this.server.sendJSON(res, errorResponse, statusCode);
+    protected async getRequestBody(context: MiddlewareContext): Promise<Record<string, unknown>> {
+        return await HttpHandlerUtils.parseRequestBody(context.req as unknown as HttpRequest, context.res as unknown as HttpResponse);
+    }
+
+    /**
+     * Send success response with consistent format
+     * Uses HttpHandlerUtils for standardized responses
+     */
+    protected sendSuccess(context: MiddlewareContext, data: Record<string, unknown> | unknown[], message?: string): void {
+        const response = HttpHandlerUtils.createSuccessResponse(data, message);
+        this.server.sendJSON(context.res as unknown as HttpResponse, response);
+    }
+
+    /**
+     * Send error response with consistent format
+     * Uses HttpHandlerUtils for standardized responses
+     */
+    protected sendError(context: MiddlewareContext, message: string, statusCode: number = 400): void {
+        const response = HttpHandlerUtils.createErrorResponse(message);
+        this.server.sendJSON(context.res as unknown as HttpResponse, response, statusCode);
+    }
+
+    /**
+     * Extract query parameters from request
+     * Uses HttpHandlerUtils for consistent extraction
+     */
+    protected getQueryParams(context: MiddlewareContext): Record<string, string> {
+        return HttpHandlerUtils.extractQueryParams(context.req as unknown as HttpRequest);
+    }
+
+    /**
+     * Extract path parameters from request
+     * Uses HttpHandlerUtils for consistent extraction
+     */
+    protected getPathParams(context: MiddlewareContext, routePattern?: string): Record<string, string> {
+        if (!routePattern) {
+            // Si pas de pattern fourni, retourner un objet vide ou extraire depuis l'URL
+            return {};
         }
+        const url = context.url || '';
+        return HttpHandlerUtils.extractPathParams(url, routePattern);
+    }
+
+    /**
+     * Validate required fields in request body
+     * Uses HttpHandlerUtils for consistent validation
+     */
+    protected validateRequiredFields(data: Record<string, unknown>, fields: string[]): void {
+        HttpHandlerUtils.validateRequiredFields(data, fields);
+    }
+
+    /**
+     * Log request with consistent format
+     */
+    protected logRequest(context: MiddlewareContext, additionalData?: Record<string, unknown>): void {
+        const method = context.method || 'UNKNOWN';
+        const url = context.url || 'unknown';
+        const userAgent = context.headers?.['user-agent'] || 'unknown';
+        const ip = this.getClientIP(context);
+        
+        this.logger.info(`${method} ${url}`, {
+            ip,
+            userAgent,
+            requestId: context.requestId,
+            ...additionalData
+        });
+    }
+
+    /**
+     * Check if request is authenticated
+     */
+    protected isAuthenticated(context: MiddlewareContext): boolean {
+        return !!(context as any).user;
+    }
+
+    /**
+     * Get authenticated user from context
+     */
+    protected getUser(context: MiddlewareContext): any {
+        return (context as any).user;
+    }
+
+    /**
+     * Get user roles from context
+     */
+    protected getUserRoles(context: MiddlewareContext): string[] {
+        const user = this.getUser(context);
+        return user?.roles || [];
+    }
+
+    /**
+     * Check if user has required role
+     */
+    protected hasRole(context: MiddlewareContext, role: string): boolean {
+        const roles = this.getUserRoles(context);
+        return roles.includes(role);
+    }
+
+    /**
+     * Check if user has any of the required roles
+     */
+    protected hasAnyRole(context: MiddlewareContext, roles: string[]): boolean {
+        const userRoles = this.getUserRoles(context);
+        return roles.some(role => userRoles.includes(role));
+    }
+
+    /**
+     * Get request IP address
+     */
+    protected getClientIP(context: MiddlewareContext): string {
+        // Essayer d'abord les headers de proxy
+        const forwarded = context.headers?.['x-forwarded-for'];
+        if (forwarded) {
+            return forwarded.split(',')[0].trim();
+        }
+        
+        const realIp = context.headers?.['x-real-ip'];
+        if (realIp) {
+            return realIp;
+        }
+        
+        // Fallback vers l'IP de connexion directe ou valeur par défaut
+        return context.headers?.['remote-addr'] || 'unknown';
+    }
+
+    /**
+     * Get user agent from request
+     */
+    protected getUserAgent(context: MiddlewareContext): string {
+        return context.headers?.['user-agent'] || 'unknown';
     }
 
     /**
      * Generate a unique request ID for tracking
      */
     private generateRequestId(): string {
-        return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    }
-
-    /**
-     * Get parsed JSON body from request (if available from Enhanced Router)
-     * Falls back to manual parsing if not available
-     */
-    protected getRequestBody(req: HttpRequest | EnhancedHttpRequest, res?: HttpResponse): any {
-        // Check if Enhanced Router has already parsed the body
-        if ((req as EnhancedHttpRequest).body !== undefined) {
-            return (req as EnhancedHttpRequest).body;
-        }
-        
-        // Return empty object if no body available to prevent destructuring errors
-        return {};
-    }
-
-    /**
-     * Get parsed JSON body with async fallback
-     */
-    protected async getRequestBodyAsync(req: HttpRequest | EnhancedHttpRequest, res: HttpResponse): Promise<any> {
-        // Check if Enhanced Router has already parsed the body
-        if ((req as EnhancedHttpRequest).body !== undefined) {
-            return (req as EnhancedHttpRequest).body;
-        }
-        
-        // Fall back to manual parsing
-        return this.parseJsonBodyManual(res);
-    }
-
-    /**
-     * Parse JSON body safely with error handling (legacy method)
-     */
-    protected async parseJsonBody(res: any): Promise<any> {
-        return this.parseJsonBodyManual(res);
-    }
-
-    /**
-     * Manual JSON body parsing (for cases where Enhanced Router didn't parse it)
-     */
-    private async parseJsonBodyManual(res: any): Promise<any> {
-        try {
-            const body = await this.server.readBody(res);
-            return JSON.parse(body);
-        } catch (error) {
-            throw new Error('Invalid JSON in request body');
-        }
-    }
-
-    /**
-     * Send success response with consistent format
-     */
-    protected sendSuccess(res: HttpResponse, data: any, message?: string): void {
-        const response = message ? { message, ...data } : data;
-        this.server.sendJSON(res, response);
-    }
-
-    /**
-     * Send error response with consistent format
-     */
-    protected sendError(res: HttpResponse, message: string, statusCode: number = 400): void {
-        this.server.sendJSON(res, { error: message }, statusCode);
-    }
-
-    /**
-     * Extract query parameters from request
-     */
-    protected getQueryParams(req: HttpRequest | EnhancedHttpRequest): Record<string, string> {
-        try {
-            const query = req.getQuery();
-            const params: Record<string, string> = {};
-            
-            if (query) {
-                const searchParams = new URLSearchParams(query);
-                for (const [key, value] of searchParams.entries()) {
-                    params[key] = value;
-                }
-            }
-            
-            return params;
-        } catch (error) {
-            return {};
-        }
-    }
-
-    /**
-     * Extract path parameters from request
-     */
-    protected getPathParams(req: HttpRequest | EnhancedHttpRequest): Record<string, string> {
-        try {
-            // Check if Enhanced Router has already parsed the params
-            if ((req as EnhancedHttpRequest).params !== undefined) {
-                return (req as EnhancedHttpRequest).params || {};
-            }
-            
-            // For uWS, parameters are accessed by index, not as an object
-            // This would need to be implemented by the router that knows the route pattern
-            return {};
-        } catch (error) {
-            return {};
-        }
-    }
-
-    /**
-     * Validate required fields in request body
-     */
-    protected validateRequiredFields(data: any, requiredFields: string[]): void {
-        const missingFields = requiredFields.filter(field => !data[field]);
-        if (missingFields.length > 0) {
-            this.createValidationError(`Missing required fields: ${missingFields.join(', ')}`, missingFields.join(','));
-        }
-    }
-
-    /**
-     * Helper methods for creating specific errors
-     */
-    protected createValidationError(message: string, field?: string, value?: any): never {
-        throw this.errorHandler.createValidationError(message, field, value);
-    }
-
-    protected createNotFoundError(resource: string, id?: string): never {
-        throw this.errorHandler.createNotFoundError(resource, id);
-    }
-
-    protected createUnauthorizedError(message?: string): never {
-        throw this.errorHandler.createAuthenticationError(message);
-    }
-
-    protected createForbiddenError(message?: string, resource?: string): never {
-        throw this.errorHandler.createAuthorizationError(message, resource);
-    }
-
-    protected createConflictError(message: string, resource?: string): never {
-        throw this.errorHandler.createConflictError(message, resource);
-    }
-
-    protected createBusinessRuleError(message: string, rule?: string): never {
-        throw this.errorHandler.createBusinessRuleError(message, rule);
+        return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     }
 }
