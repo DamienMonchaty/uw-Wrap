@@ -72,7 +72,7 @@ export class ServerEventManager {
 
         // Execute handlers
         const handlers = this.eventHandlers.get(eventType) || [];
-        
+
         for (const handler of handlers) {
             try {
                 await handler(eventType, data);
@@ -80,12 +80,10 @@ export class ServerEventManager {
                 this.logger.error(`Error in ${eventType} event handler:`, error);
                 // Don't rethrow to prevent one handler from breaking others
             }
-        }
-
-        // Log important events
-        if (['starting', 'started', 'stopping', 'stopped', 'error'].includes(eventType)) {
-            this.logger.info(`Server event: ${eventType}`, { data });
-        }
+        }        // Log important events (disabled for cleaner output)
+        // if (['starting', 'started', 'stopping', 'stopped', 'error'].includes(eventType)) {
+        //     this.logger.info(`Server event: ${eventType}`, { data });
+        // }
     }
 
     /**

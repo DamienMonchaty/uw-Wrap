@@ -48,9 +48,7 @@ export class UserHandler extends HttpHandler {
     ) {
         super(server, logger, errorHandler);
         this.userService = userService;
-    }
-
-    /**
+    }    /**
      * Create a new user
      */
     @POST('/')
@@ -59,33 +57,30 @@ export class UserHandler extends HttpHandler {
     async createUser(context: MiddlewareContext) {
         try {
             const userData = await this.getRequestBody(context);
-            
+
             const user = await this.userService.createUser({
                 username: userData.username as string,
                 email: userData.email as string,
                 name: userData.name as string
             });
-            
+
             this.logger.info(`User created successfully: ${user.id}`);
-            
+
             this.sendSuccess(context, { user }, 'User created successfully');
         } catch (error) {
             this.logger.error('Error creating user:', error);
             this.sendError(context, 'Failed to create user', 500);
         }
-    }
-
-    /**
+    }    /**
      * Get all users
      */
     @GET('/')
-    @Auth()
     async getAllUsers(context: MiddlewareContext) {
         try {
             const users = await this.userService.getAllUsers();
-            
+
             this.logger.info(`Retrieved ${users.length} users`);
-            
+
             this.sendSuccess(context, { users, total: users.length });
         } catch (error) {
             this.logger.error('Error retrieving users:', error);
@@ -101,21 +96,21 @@ export class UserHandler extends HttpHandler {
     async getUserById(context: MiddlewareContext) {
         try {
             const { id } = this.getPathParams(context);
-            
+
             if (!id) {
                 this.sendError(context, 'User ID is required', 400);
                 return;
             }
 
             const user = await this.userService.getUserById(parseInt(id));
-            
+
             if (!user) {
                 this.sendError(context, `User with ID ${id} not found`, 404);
                 return;
             }
 
             this.logger.info(`Retrieved user: ${id}`);
-            
+
             this.sendSuccess(context, { user });
         } catch (error) {
             this.logger.error('Error retrieving user:', error);
@@ -132,7 +127,7 @@ export class UserHandler extends HttpHandler {
     async updateUser(context: MiddlewareContext) {
         try {
             const { id } = this.getPathParams(context);
-            
+
             if (!id) {
                 this.sendError(context, 'User ID is required', 400);
                 return;
@@ -140,14 +135,14 @@ export class UserHandler extends HttpHandler {
 
             const updateData = await this.getRequestBody(context);
             const user = await this.userService.updateUser(parseInt(id), updateData);
-            
+
             if (!user) {
                 this.sendError(context, `User with ID ${id} not found`, 404);
                 return;
             }
 
             this.logger.info(`User updated successfully: ${id}`);
-            
+
             this.sendSuccess(context, { user }, 'User updated successfully');
         } catch (error) {
             this.logger.error('Error updating user:', error);
@@ -163,32 +158,25 @@ export class UserHandler extends HttpHandler {
     async deleteUser(context: MiddlewareContext) {
         try {
             const { id } = this.getPathParams(context);
-            
+
             if (!id) {
                 this.sendError(context, 'User ID is required', 400);
                 return;
             }
 
             const deleted = await this.userService.deleteUser(parseInt(id));
-            
+
             if (!deleted) {
                 this.sendError(context, `User with ID ${id} not found`, 404);
                 return;
             }
 
             this.logger.info(`User deleted successfully: ${id}`);
-            
+
             this.sendSuccess(context, {}, 'User deleted successfully');
         } catch (error) {
             this.logger.error('Error deleting user:', error);
             this.sendError(context, 'Failed to delete user', 500);
         }
-    }
-
-    /**
-     * Routes are automatically registered via decorators
-     */
-    registerRoutes(): void {
-        this.logger.info('UserHandler routes are automatically registered via decorators');
     }
 }

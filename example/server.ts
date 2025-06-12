@@ -5,19 +5,28 @@
 
 import { ApplicationBootstrap } from '../src/core/ApplicationBootstrap';
 import { createConfigFromEnv } from './core/AppConfig';
+// import { AutoRegistration } from '../src/core/AutoRegistration';
+
+// // Import handlers to ensure decorators are applied during auto-discovery
+// import { UserHandler } from './handlers/UserHandler';
+// import { UserServiceImpl } from './services/UserService';
+
+// // Manually register classes for auto-discovery
+// AutoRegistration.registerClass(UserHandler);
+// AutoRegistration.registerClass(UserServiceImpl);
 
 async function startServer(): Promise<void> {
     const config = createConfigFromEnv();
     const bootstrap = new ApplicationBootstrap(config);
-    
+
     // Start with all features enabled
     await bootstrap.start({
         verbose: true,
-        enableHealthChecks: true,
+        enableHealthCheck: true,
+        enableAutoDiscovery: true,
         enableMetrics: true,
-        enableGracefulShutdown: true,
-        shutdownTimeoutMs: 10000,
-        metricsIntervalMs: 30000
+        skipDatabaseInit: true,
+        metricsIntervalMs: 5000
     });
 
     // Setup custom monitoring
@@ -39,11 +48,8 @@ function setupCustomMonitoring(bootstrap: ApplicationBootstrap): void {
     if (metricsService) {
         metricsService.increment('app.startup.total');
         metricsService.gauge('app.version', 1.0);
-    }
-
-    // Custom cleanup on shutdown
+    }    // Custom cleanup on shutdown
     bootstrap.onShutdown(async () => {
-        console.log('🧹 Performing application cleanup...');
         metricsService?.increment('app.shutdown.graceful');
     });
 }

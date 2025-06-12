@@ -269,10 +269,8 @@ export class AutoRegistration {
      */
     static async processRouteDecorators(container: Container, logger?: Logger): Promise<void> {
         logger?.info('🔗 Processing route decorators from controllers...');
-        
-        try {
+          try {
             // Get the server wrapper to register routes
-            logger?.debug('Resolving ServerWrapper from container...');
             const serverWrapper = container.resolve(SERVICE_TYPES.ServerWrapper) as any;
             
             if (!serverWrapper) {
@@ -284,17 +282,12 @@ export class AutoRegistration {
                 throw new Error('ServerWrapper does not support route registration - missing addHttpHandler() method');
             }
             
-            logger?.debug(`Found ${this.registeredClasses.size} registered classes to process`);
-            
             // Process each registered controller
             for (const constructor of this.registeredClasses) {
                 const metadata = this.extractMetadata(constructor);
                 
                 if (metadata && metadata.type === 'controller') {
-                    logger?.debug(`Processing controller: ${String(metadata.identifier)}`);
                     await this.processControllerRoutes(container, constructor, metadata, serverWrapper, logger);
-                } else {
-                    logger?.debug(`Skipping non-controller: ${constructor.name} (type: ${metadata?.type || 'unknown'})`);
                 }
             }
             
@@ -319,8 +312,7 @@ export class AutoRegistration {
         metadata: InjectableMetadata,
         serverWrapper: any,
         logger?: Logger
-    ): Promise<void> {
-        try {
+    ): Promise<void> {        try {
             // Get the controller instance from container
             const controllerInstance = container.resolve(metadata.identifier);
             
@@ -334,14 +326,10 @@ export class AutoRegistration {
             
             // Get route information using MetadataUtils
             const { classMetadata, routes } = MetadataUtils.extractRouteInfo(constructor);
-            
-            logger?.debug(`Processing ${routes.length} routes for controller ${String(metadata.identifier)}`);
-            
-            // Register each route
+              // Register each route
             for (const route of routes) {
                 const fullPath = MetadataUtils.getFullPath(classMetadata, route.path);
                 await this.registerRoute(serverWrapper, route.method, fullPath, controllerInstance, route.handler, logger);
-                logger?.debug(`Registered route: ${route.method.toUpperCase()} ${fullPath} -> ${route.handler}`);
             }
             
             if (routes.length > 0) {
