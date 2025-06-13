@@ -28,9 +28,7 @@
     "@types/jsonwebtoken": "^9.0.9",
     "dotenv": "^16.5.0",
     "jsonwebtoken": "^9.0.2",
-    "mysql2": "^3.14.1",
     "reflect-metadata": "^0.2.2",
-    "sqlite3": "^5.1.7",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
     "uws": "^200.0.0"
   },

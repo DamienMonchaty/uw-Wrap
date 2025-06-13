@@ -1,6 +1,11 @@
 /**
- * Application Configuration Interface
- * Extends the base framework configuration with app-specific settings
+ * Application Confi            host: process.env.HOST || '0.0.0.0'
+        },
+        auth: {
+            jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
+            jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h'
+        },
+        cors: { * Extends the base framework configuration with app-specific settings
  */
 
 import { ApplicationConfig } from '../../src/core/container/ApplicationConfig';
@@ -27,18 +32,6 @@ export function createConfigFromEnv(): AppConfig {
         auth: {
             jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
             jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h'
-        },
-        database: {
-            type: (process.env.DB_TYPE as 'sqlite' | 'mysql') || 'sqlite',
-            sqlite: { file: process.env.SQLITE_FILE || './database.sqlite' },
-            mysql: process.env.DB_TYPE === 'mysql' ? {
-                host: process.env.DB_HOST || 'localhost',
-                port: parseInt(process.env.DB_PORT || '3306', 10),
-                user: process.env.DB_USER || 'root',
-                password: process.env.DB_PASSWORD || '',
-                database: process.env.DB_NAME || 'test',
-                connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT || '10', 10)
-            } : undefined
         },
         cors: {
             origin: process.env.CORS_ORIGIN || '*',

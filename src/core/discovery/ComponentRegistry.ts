@@ -359,7 +359,6 @@ export class ComponentRegistry {
             'Logger': Symbol.for('Logger'),
             'ErrorHandler': Symbol.for('ErrorHandler'),
             'JWTManager': Symbol.for('JWTManager'),
-            'DatabaseProvider': Symbol.for('DatabaseProvider'),
             'Config': Symbol.for('Config'),
             'UWebSocketWrapper': 'UWebSocketWrapper',
             'UserService': 'UserService',

@@ -9,11 +9,7 @@ import { ContainerBuilder } from './container/ContainerBuilder';
 import { SERVICE_TYPES } from './container/ServiceTypes';
 import { ApplicationConfig, createDefaultApplicationConfig } from './container/ApplicationConfig';
 import { Logger } from '../utils/logger';
-import { ModuleLoader } from './bootstrap/ModuleLoader';
 import { ServerStarter } from './bootstrap/ServerStarter';
-import { AutoDiscovery } from './AutoDiscovery';
-import { HealthCheckService } from './health/HealthCheckService';
-import { MetricsService } from './metrics/MetricsService';
 
 /**
  * Bootstrap result interface
@@ -30,10 +26,6 @@ export interface BootstrapResult {
  */
 export interface BootstrapOptions {
     enableAutoDiscovery?: boolean;
-    enableMetrics?: boolean;
-    enableHealthCheck?: boolean;
-    metricsIntervalMs?: number;
-    skipDatabaseInit?: boolean;
     verbose?: boolean;
 }
 
@@ -44,7 +36,6 @@ export interface BootstrapOptions {
 export class ApplicationBootstrap {
     private containerBuilder: ContainerBuilder;
     private container?: Container;
-    private moduleLoader?: ModuleLoader;
     private serverStarter?: ServerStarter;
     private config: ApplicationConfig;
     private logger: Logger;
@@ -53,13 +44,13 @@ export class ApplicationBootstrap {
         // Apply defaults if needed
         this.config = { ...createDefaultApplicationConfig(), ...config };
         this.logger = new Logger();
-        
+
         // Initialize container builder with modern system
         this.containerBuilder = ContainerBuilder.create({
             enableDebug: false, // Disable debug for clean output
             logger: this.logger
         }).withConfig(this.config);
-        
+
         this.logger.info('🔄 ApplicationBootstrap initialized with modern container system');
     }
 
@@ -80,12 +71,9 @@ export class ApplicationBootstrap {
             // 3. Perform auto-discovery
             await this.performAutoDiscovery();
 
-            // 4. Setup module loader
-            this.moduleLoader = new ModuleLoader(this.container);
-            
             // 4. Setup server lifecycle management
             const wrapper = this.container.resolve(SERVICE_TYPES.ServerWrapper) as any; // Type assertion needed for start method
-            this.serverStarter = new ServerStarter(this.moduleLoader, this.logger);
+            this.serverStarter = new ServerStarter(this.logger);
 
             // 5. Start the actual HTTP server
             await wrapper.start();
@@ -157,19 +145,23 @@ export class ApplicationBootstrap {
 
         try {
             this.logger.info('🔍 Starting auto-registration of decorated components...');
-            
+
+            // Use the AutoDiscovery system to discover handlers and controllers
+            const { AutoDiscovery } = await import('./AutoDiscovery');
+            await new AutoDiscovery(this.logger).discoverAndRegister(this.container);
+
             // Use the AutoRegistration system to register decorated components
             const { AutoRegistration } = await import('./AutoRegistration');
             const stats = await AutoRegistration.autoRegister(this.container, {
                 continueOnError: true,
                 skipDuplicates: true
             }, this.logger);
-            
+
             this.logger.info('✅ Auto-registration completed:', stats);
-            
+
             // Setup routes from discovered handlers
             await this.setupDiscoveredRoutes();
-            
+
         } catch (error) {
             this.logger.warn('Auto-registration failed:', error);
             // Don't attempt fallback manual registration - keep it pure
@@ -184,13 +176,13 @@ export class ApplicationBootstrap {
 
         try {
             this.logger.info('🔗 Processing route decorators from discovered handlers...');
-            
+
             // Use the AutoRegistration system to process route decorators
             const { AutoRegistration } = await import('./AutoRegistration');
             await AutoRegistration.processRouteDecorators(this.container, this.logger);
-            
+
             this.logger.info('✅ Route decorators processed successfully');
-            
+
         } catch (error) {
             this.logger.error('Failed to process route decorators:', error);
             // Simplified fallback: just log the error, don't try manual registration
@@ -203,9 +195,7 @@ export class ApplicationBootstrap {
      */
     async quickStart(): Promise<BootstrapResult> {
         return this.start({
-            enableAutoDiscovery: true,
-            enableMetrics: true,
-            enableHealthCheck: true
+            enableAutoDiscovery: true
         });
     }
 
@@ -217,20 +207,6 @@ export class ApplicationBootstrap {
             throw new Error('Application not started yet. Call start() first.');
         }
         return this.container;
-    }
-
-    /**
-     * Get health check service
-     */
-    getHealthCheckService(): HealthCheckService | undefined {
-        return this.moduleLoader?.getHealthCheckService();
-    }
-
-    /**
-     * Get metrics service
-     */
-    getMetricsService(): MetricsService | undefined {
-        return this.moduleLoader?.getMetricsService();
     }
 
     /**
@@ -272,7 +248,7 @@ export class ApplicationBootstrap {
  * Convenience function for quick server startup
  */
 export async function startApplication(
-    config: ApplicationConfig, 
+    config: ApplicationConfig,
     options: BootstrapOptions = {}
 ): Promise<BootstrapResult> {
     const bootstrap = new ApplicationBootstrap(config);

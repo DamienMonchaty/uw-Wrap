@@ -21,8 +21,6 @@ export interface ServiceConfig {
     infrastructure: InfrastructureServicesConfig;
     /** Authentication services */
     auth: AuthServicesConfig;
-    /** Database services */
-    database: DatabaseServicesConfig;
     /** Application services */
     application: ApplicationServicesConfig;
 }
@@ -188,34 +186,6 @@ export const DEFAULT_SERVICE_CONFIG: ServiceConfig = {
                 const config = container.resolve<ApplicationConfig>(SERVICE_TYPES.Config);
                 const { JWTManager } = require('../../auth/JwtManager');
                 return new JWTManager(config.auth.jwtSecret, config.auth.jwtExpiresIn);
-            }
-        }
-    },
-    
-    database: {
-        provider: {
-            identifier: SERVICE_TYPES.DatabaseProvider,
-            scope: 'singleton',
-            dependencies: [SERVICE_TYPES.Config, SERVICE_TYPES.Logger, SERVICE_TYPES.ErrorHandler],
-            tags: [SERVICE_TAGS.CORE, SERVICE_TAGS.DATABASE],
-            condition: (container: Container) => {
-                const config = container.tryResolve<ApplicationConfig>(SERVICE_TYPES.Config);
-                return !!(config && config.database);
-            },
-            factory: (container: Container) => {
-                const config = container.resolve<ApplicationConfig>(SERVICE_TYPES.Config);
-                const logger = container.resolve<Logger>(SERVICE_TYPES.Logger);
-                const errorHandler = container.resolve<ErrorHandler>(SERVICE_TYPES.ErrorHandler);
-                
-                if (config.database.type === 'mysql' && config.database.mysql) {
-                    const { MySQLProvider } = require('../../database/providers/MySQLProvider');
-                    return new MySQLProvider(config.database.mysql, logger, errorHandler);
-                } else if (config.database.type === 'sqlite' && config.database.sqlite) {
-                    const { SQLiteProvider } = require('../../database/providers/SQLiteProvider');
-                    return new SQLiteProvider(config.database.sqlite.file, logger, errorHandler);
-                } else {
-                    throw new Error('Invalid database configuration');
-                }
             }
         }
     },
@@ -429,14 +399,6 @@ export function mergeServiceConfigs(base: ServiceConfig, override: Partial<Servi
     if (override.auth) {
         Object.entries(override.auth).forEach(([key, service]) => {
             if (service) {
-                builder.overrideService(service.identifier, service);
-            }
-        });
-    }
-    
-    if (override.database) {
-        Object.entries(override.database).forEach(([key, service]) => {
-            if (service && typeof service === 'object' && 'identifier' in service) {
                 builder.overrideService(service.identifier, service);
             }
         });

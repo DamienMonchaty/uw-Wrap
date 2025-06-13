@@ -95,7 +95,9 @@ export class UserHandler extends HttpHandler {
     @Auth()
     async getUserById(context: MiddlewareContext) {
         try {
-            const { id } = this.getPathParams(context);
+            const { id } = this.getPathParams(context, '/users/:id');
+            this.logger.info('Context params:', context.params);
+
 
             if (!id) {
                 this.sendError(context, 'User ID is required', 400);
@@ -126,7 +128,7 @@ export class UserHandler extends HttpHandler {
     @Auth(['admin', 'moderator'])
     async updateUser(context: MiddlewareContext) {
         try {
-            const { id } = this.getPathParams(context);
+            const { id } = this.getPathParams(context, '/users/:id');
 
             if (!id) {
                 this.sendError(context, 'User ID is required', 400);
@@ -157,7 +159,7 @@ export class UserHandler extends HttpHandler {
     @Auth(['admin'])
     async deleteUser(context: MiddlewareContext) {
         try {
-            const { id } = this.getPathParams(context);
+            const { id } = this.getPathParams(context, '/users/:id');
 
             if (!id) {
                 this.sendError(context, 'User ID is required', 400);

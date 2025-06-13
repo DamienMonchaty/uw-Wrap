@@ -7,7 +7,7 @@ import * as uWS from 'uWebSockets.js';
 import { HttpHandler, WebSocketHandler } from '../types';
 import { Logger } from '../utils/logger';
 import { ErrorHandler } from '../utils/errorHandler';
-import { JWTManager } from '../auth/JwtManager';
+import { JWTManager } from '../auth/jwtManager';
 
 // Import specialized managers
 import { ServerEventManager, ServerEventType } from './server/ServerEventManager';

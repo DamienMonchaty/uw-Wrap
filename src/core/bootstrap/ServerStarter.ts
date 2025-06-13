@@ -4,7 +4,6 @@
  */
 
 import { Logger } from '../../utils/logger';
-import { ModuleLoader } from './ModuleLoader';
 
 export interface ServerStarterOptions {
     /** Enable automatic graceful shutdown handling */
@@ -27,7 +26,6 @@ export class ServerStarter {
     private logger?: Logger;
 
     constructor(
-        private moduleLoader: ModuleLoader,
         logger?: Logger
     ) {
         this.logger = logger;
@@ -144,9 +142,6 @@ export class ServerStarter {
                     }
                 }
             }
-
-            // Cleanup modules
-            await this.moduleLoader.cleanup();
 
             if (this.logger) {
                 this.logger.info('✅ Shutdown sequence completed');

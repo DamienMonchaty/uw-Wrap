@@ -216,12 +216,10 @@ export class AutoRegistration {
         return {
             'UserService': 'UserService',
             'UserServiceImpl': 'UserService', // Map implementation class to service identifier
-            'ProductService': 'ProductService',
-            'ProductRepository': 'ProductRepository',
+            'ProductService': 'ProductService',            'ProductRepository': 'ProductRepository',
             'UserRepository': 'UserRepository',
             'AppRepositoryManager': 'AppRepositoryManager',
-            'RepositoryManager': 'AppRepositoryManager',
-            'DatabaseProvider': 'DatabaseProvider'
+            'RepositoryManager': 'AppRepositoryManager'
         };
     }
 

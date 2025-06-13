@@ -12,17 +12,11 @@ export const SERVICE_TYPES = {
     Logger: Symbol.for('Logger'),
     ErrorHandler: Symbol.for('ErrorHandler'),
     Container: Symbol.for('Container'),
-    
-    // Authentication & Security
+      // Authentication & Security
     JWTManager: Symbol.for('JWTManager'),
     JWTService: Symbol.for('JWTService'),
     AuthenticationService: Symbol.for('AuthenticationService'),
     UserRoleService: Symbol.for('UserRoleService'),
-    
-    // Database
-    DatabaseProvider: Symbol.for('DatabaseProvider'),
-    DatabaseConnection: Symbol.for('DatabaseConnection'),
-    DatabaseMigrator: Symbol.for('DatabaseMigrator'),
     
     // Server & Networking
     ServerWrapper: Symbol.for('ServerWrapper'),
@@ -119,14 +113,9 @@ export interface ServiceTypeMap {
     // Core
     [SERVICE_TYPES.Logger]: import('../../utils/logger').Logger;
     [SERVICE_TYPES.ErrorHandler]: import('../../utils/errorHandler').ErrorHandler;
-    [SERVICE_TYPES.Container]: import('./Container').Container;
-    
-    // Auth
-    [SERVICE_TYPES.JWTManager]: import('../../auth/JwtManager').JWTManager;
+    [SERVICE_TYPES.Container]: import('./Container').Container;    // Auth
+    [SERVICE_TYPES.JWTManager]: import('../../auth/jwtManager').JWTManager;
     [SERVICE_TYPES.JWTService]: import('../../auth/JwtService').JwtService;
-    
-    // Database
-    [SERVICE_TYPES.DatabaseProvider]: import('../../database/interfaces/DatabaseProvider').DatabaseProvider;
     
     // Server
     [SERVICE_TYPES.ServerWrapper]: import('../ServerWrapper').UWebSocketWrapper;
@@ -141,10 +130,6 @@ export interface ServiceTypeMap {
     [SERVICE_TYPES.ResponseManager]: import('../server/ResponseManager').ResponseManager;
     [SERVICE_TYPES.RequestManager]: import('../server/RequestManager').RequestManager;
     [SERVICE_TYPES.AuthenticationWrapper]: import('../server/AuthenticationWrapper').AuthenticationWrapper;
-    
-    // Health & Monitoring
-    [SERVICE_TYPES.HealthCheckService]: import('../health/HealthCheckService').HealthCheckService;
-    [SERVICE_TYPES.MetricsService]: import('../metrics/MetricsService').MetricsService;
 }
 
 // ============================================================================

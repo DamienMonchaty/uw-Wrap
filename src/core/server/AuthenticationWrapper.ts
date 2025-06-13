@@ -7,7 +7,7 @@ import * as uWS from 'uWebSockets.js';
 import { HttpHandler } from '../../types';
 import { Logger } from '../../utils/logger';
 import { ErrorHandler } from '../../utils/errorHandler';
-import { JWTManager } from '../../auth/JwtManager';
+import { JWTManager } from '../../auth/jwtManager';
 
 export interface AuthenticatedRequest extends uWS.HttpRequest {
     user?: any;

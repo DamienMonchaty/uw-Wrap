@@ -19,8 +19,6 @@ export interface ApplicationConfig {
     server: ServerConfig;
     /** Authentication configuration */
     auth: AuthConfig;
-    /** Database configuration */
-    database: DatabaseConfig;
     /** CORS configuration */
     cors?: CorsConfig;
     /** Logging configuration */
@@ -63,71 +61,6 @@ export interface AuthConfig {
         enabled: boolean;
         expiresIn: string;
     };
-}
-
-export interface DatabaseConfig {
-    /** Database type */
-    type: 'sqlite' | 'mysql' | 'postgresql';
-    /** SQLite configuration */
-    sqlite?: SqliteConfig;
-    /** MySQL configuration */
-    mysql?: MySqlConfig;
-    /** PostgreSQL configuration */
-    postgresql?: PostgreSqlConfig;
-    /** Connection pool settings */
-    pool?: {
-        min?: number;
-        max?: number;
-        idle?: number;
-    };
-    /** Migration settings */
-    migrations?: {
-        enabled: boolean;
-        directory?: string;
-    };
-}
-
-export interface SqliteConfig {
-    /** Database file path */
-    file: string;
-    /** WAL mode enabled */
-    walMode?: boolean;
-    /** Pragma settings */
-    pragma?: Record<string, any>;
-}
-
-export interface MySqlConfig {
-    /** Database host */
-    host: string;
-    /** Database port */
-    port: number;
-    /** Database user */
-    user: string;
-    /** Database password */
-    password: string;
-    /** Database name */
-    database: string;
-    /** Connection limit */
-    connectionLimit: number;
-    /** Additional options */
-    options?: Record<string, any>;
-}
-
-export interface PostgreSqlConfig {
-    /** Database host */
-    host: string;
-    /** Database port */
-    port: number;
-    /** Database user */
-    user: string;
-    /** Database password */
-    password: string;
-    /** Database name */
-    database: string;
-    /** SSL configuration */
-    ssl?: boolean | object;
-    /** Additional options */
-    options?: Record<string, any>;
 }
 
 export interface CorsConfig {
@@ -487,14 +420,6 @@ export class ApplicationConfigBuilder {
     }
 
     /**
-     * Set database configuration
-     */
-    database(config: DatabaseConfig): this {
-        this.config.database = config;
-        return this;
-    }
-
-    /**
      * Set CORS configuration
      */
     cors(config: CorsConfig): this {
@@ -568,39 +493,6 @@ export class ApplicationConfigBuilder {
             jwtAudience: process.env.JWT_AUDIENCE
         });
 
-        // Database configuration
-        const dbType = (process.env.DB_TYPE || 'sqlite') as 'sqlite' | 'mysql' | 'postgresql';
-        const databaseConfig: DatabaseConfig = { type: dbType };
-
-        if (dbType === 'sqlite') {
-            databaseConfig.sqlite = {
-                file: process.env.DB_FILE || './app.db',
-                walMode: process.env.DB_WAL_MODE === 'true'
-            };
-        } else if (dbType === 'mysql') {
-            databaseConfig.mysql = {
-                host: process.env.DB_HOST || 'localhost',
-                port: parseInt(process.env.DB_PORT || '3306', 10),
-                user: process.env.DB_USER || 'root',
-                password: process.env.DB_PASSWORD || '',
-                database: process.env.DB_NAME || 'app',
-                connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT || '10', 10)
-            };
-        } else if (dbType === 'postgresql') {
-            databaseConfig.postgresql = {
-                host: process.env.DB_HOST || 'localhost',
-                port: parseInt(process.env.DB_PORT || '5432', 10),
-                user: process.env.DB_USER || 'postgres',
-                password: process.env.DB_PASSWORD || '',
-                database: process.env.DB_NAME || 'app',
-                ssl: process.env.DB_SSL === 'true' || process.env.DB_SSL_CONFIG ? 
-                    (process.env.DB_SSL_CONFIG ? JSON.parse(process.env.DB_SSL_CONFIG) : true) : 
-                    undefined
-            };
-        }
-
-        builder.database(databaseConfig);
-
         // CORS configuration
         if (process.env.CORS_ORIGIN) {
             builder.cors({
@@ -662,12 +554,6 @@ export function createDefaultApplicationConfig(overrides: Partial<ApplicationCon
         auth: {
             jwtSecret: 'change-this-secret-in-production',
             jwtExpiresIn: '24h'
-        },
-        database: {
-            type: 'sqlite',
-            sqlite: {
-                file: './app.db'
-            }
         },
         logging: {
             enabled: true,

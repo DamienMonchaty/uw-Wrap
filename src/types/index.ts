@@ -10,10 +10,6 @@ export interface HttpHandler {
     (req: uWS.HttpRequest, res: uWS.HttpResponse): void | Promise<void>;
 }
 
-export interface DatabaseRecord {
-    [key: string]: any;
-}
-
 export interface ErrorResponse {
     error: string;
     code: string;
