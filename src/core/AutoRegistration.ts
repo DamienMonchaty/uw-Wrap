@@ -311,13 +311,18 @@ export class AutoRegistration {
         metadata: InjectableMetadata,
         serverWrapper: any,
         logger?: Logger
-    ): Promise<void> {        try {
-            // Get the controller instance from container
+    ): Promise<void> {        try {            // Get the controller instance from container
             const controllerInstance = container.resolve(metadata.identifier);
             
             if (!controllerInstance) {
                 logger?.warn(`Controller ${String(metadata.identifier)} not found in container`);
                 return;
+            }            // If the controller extends BaseController, inject common dependencies
+            if ((controllerInstance as any).setDependencies && typeof (controllerInstance as any).setDependencies === 'function') {
+                const errorHandler = container.resolve(SERVICE_TYPES.ErrorHandler);
+                const server = container.resolve(SERVICE_TYPES.ServerWrapper);
+                (controllerInstance as any).setDependencies(errorHandler, server);
+                logger?.debug(`Dependencies injected for BaseController: ${String(metadata.identifier)}`);
             }
             
             // Import MetadataUtils to properly extract route information

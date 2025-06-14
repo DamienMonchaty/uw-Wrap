@@ -8,6 +8,7 @@ import { ErrorHandler } from '../../src/utils/errorHandler';
 import { Controller } from '../../src/core/AutoRegistration';
 import { UserServiceImpl } from '../services/UserService';
 import { MiddlewareContext } from '../../src/middleware/MiddlewareContext';
+import { BaseController } from '../../src/core/BaseController';
 
 // Validation schemas
 export const CreateUserSchema = {
@@ -37,18 +38,21 @@ export const UpdateUserSchema = {
  */
 @Controller('UserHandler')
 @Route('/users')
-export class UserHandler extends HttpHandler {
-    private userService: UserServiceImpl;
-
+export class UserHandler extends BaseController {
+    
+    private logger: Logger;
+    private userService: UserServiceImpl;    
+    
     constructor(
-        server: UWebSocketWrapper,
         logger: Logger,
-        errorHandler: ErrorHandler,
         userService: UserServiceImpl
     ) {
-        super(server, logger, errorHandler);
+        super();
+        this.logger = logger;
         this.userService = userService;
-    }    /**
+    }
+    
+    /**
      * Create a new user
      */
     @POST('/')
