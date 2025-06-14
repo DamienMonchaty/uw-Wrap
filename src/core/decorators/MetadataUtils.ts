@@ -78,6 +78,12 @@ export class MetadataUtils {
     static getFullPath(classMetadata: ClassMetadata | undefined, routePath: string): string {
         const basePath = classMetadata?.basePath || '';
         const normalizedBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+        
+        // Si routePath est vide, on retourne juste le basePath
+        if (!routePath || routePath === '') {
+            return normalizedBasePath || '/';
+        }
+        
         const normalizedRoutePath = routePath.startsWith('/') ? routePath : `/${routePath}`;
         
         if (!normalizedBasePath) {

@@ -34,10 +34,10 @@ export function Route(basePath?: string): ClassDecorator {
  * Creates decorators for different HTTP methods
  */
 function createMethodDecorator(method: string) {
-    return function (path: string = ''): MethodDecorator {
+    return function (path?: string): MethodDecorator {
         return function (target: any, propertyKey: string | symbol | undefined, descriptor?: PropertyDescriptor) {
             const key = propertyKey as string;
-            MetadataUtils.addRoute(target, key, method, path);
+            MetadataUtils.addRoute(target, key, method, path || '');
         };
     };
 }
@@ -45,7 +45,7 @@ function createMethodDecorator(method: string) {
 /**
  * GET route decorator
  * @param path - Route path (optional, defaults to empty string)
- * @example @GET('/users') or @GET()
+ * @example @GET('/users') or @GET() for base route
  */
 export const GET = createMethodDecorator('get');
 
