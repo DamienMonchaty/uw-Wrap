@@ -3,7 +3,8 @@
  * Single responsibility: Request validation using schemas
  */
 
-import { Middleware, MiddlewareContext, NextFunction } from './AuthenticationMiddleware';
+import { MiddlewareContext, NextFunction } from './MiddlewareContext';
+import { Middleware } from './AuthenticationMiddleware';
 
 export interface ValidationSchema {
     type?: string;

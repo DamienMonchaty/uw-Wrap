@@ -9,6 +9,7 @@ import { Container } from './container/Container';
 import { SERVICE_TYPES } from './container/ServiceTypes';
 import { ComponentRegistry, ComponentMetadata, RegistrationOptions } from './discovery/ComponentRegistry';
 import { Logger } from '../utils/logger';
+import { MiddlewareContextImpl } from '../middleware/MiddlewareContext';
 
 // Metadata key for injectable components
 const INJECTABLE_KEY = Symbol('injectable');
@@ -351,26 +352,50 @@ export class AutoRegistration {
         methodName: string,
         logger?: Logger
     ): Promise<void> {
-        try {
-            const handler = async (req: any, res: any) => {
-                // Create context compatible with MiddlewareContext but adapted for our needs
-                const context = {
-                    req,
-                    res,
-                    url: req.getUrl ? req.getUrl() : req.url || path,
-                    method: httpMethod.toUpperCase(),
-                    headers: req.getHeaders ? req.getHeaders() : req.headers || {},
-                    params: req.params || {},
-                    query: req.getQuery ? { query: req.getQuery() } : req.query || {},
-                    body: req.body || {},
-                    requestId: Math.random().toString(36).substring(2, 15),
-                    data: {} // MiddlewareContext requirement
-                };
+        try {      
+                logger?.debug(`HELLO`);
+            // Validate method name      
+                const handler = async (req: any, res: any) => {
+                // Create proper MiddlewareContext instance
+                const context = new MiddlewareContextImpl(req, res);
                 
-                try {
+                // Set up context properties
+                context.url = req.getUrl ? req.getUrl() : req.url || path;
+                context.method = httpMethod.toUpperCase();
+                context.requestId = Math.random().toString(36).substring(2, 15);
+                context.routePattern = path;
+                context.data = {
+                    requestId: context.requestId,
+                    startTime: Date.now()
+                };                  try {
+                    logger?.debug(`About to call handler method for: ${httpMethod.toUpperCase()} ${path}`, {
+                        method: httpMethod,
+                        path,
+                        handlerMethod: methodName,
+                        controllerName: controllerInstance.constructor.name,
+                        contextKeys: Object.keys(context)
+                    });
+                    
                     await controllerInstance[methodName](context);
-                } catch (handlerError) {
-                    logger?.error(`Route handler error for ${httpMethod.toUpperCase()} ${path}:`, handlerError);
+                    
+                    logger?.debug(`Handler method completed successfully for: ${httpMethod.toUpperCase()} ${path}`, {
+                        method: httpMethod,
+                        path,
+                        handlerMethod: methodName
+                    });                } catch (handlerError) {
+                    const error = handlerError as Error;
+                    logger?.error(`Handler error caught for ${httpMethod.toUpperCase()} ${path}:`, {
+                        error: handlerError,
+                        errorMessage: error?.message || String(handlerError),
+                        errorStack: error?.stack,
+                        method: httpMethod,
+                        path,
+                        handlerMethod: methodName,
+                        controllerName: controllerInstance.constructor.name,
+                        contextType: context.constructor.name,
+                        contextMethods: Object.getOwnPropertyNames(Object.getPrototypeOf(context))
+                    });
+                    
                     // Send error response if not already sent
                     if (!res.aborted && res.writeStatus) {
                         res.writeStatus('500 Internal Server Error');

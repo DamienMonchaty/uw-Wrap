@@ -3,7 +3,7 @@ import { Logger } from '../utils/logger';
 import { ErrorHandler } from '../utils/errorHandler';
 import { HttpHandlerUtils } from '../utils/handlers';
 import { HttpRequest, HttpResponse } from '../types/uws-types';
-import { MiddlewareContext } from '../middleware/AuthenticationMiddleware';
+import { MiddlewareContext } from '../middleware/MiddlewareContext';
 
 /**
  * Base handler class with modern architecture
@@ -46,64 +46,7 @@ export abstract class HttpHandler {
         }
     }
 
-    // =============================================================================
-    // MODERN UTILITY METHODS - Using HttpHandlerUtils
-    // =============================================================================
-
-    /**
-     * Get parsed JSON body from request
-     * Uses HttpHandlerUtils for consistent parsing
-     */
-    protected async getRequestBody(context: MiddlewareContext): Promise<Record<string, unknown>> {
-        return await HttpHandlerUtils.parseRequestBody(context.req as unknown as HttpRequest, context.res as unknown as HttpResponse);
-    }
-
-    /**
-     * Send success response with consistent format
-     * Uses HttpHandlerUtils for standardized responses
-     */
-    protected sendSuccess(context: MiddlewareContext, data: Record<string, unknown> | unknown[], message?: string): void {
-        const response = HttpHandlerUtils.createSuccessResponse(data, message);
-        this.server.sendJSON(context.res as unknown as HttpResponse, response);
-    }
-
-    /**
-     * Send error response with consistent format
-     * Uses HttpHandlerUtils for standardized responses
-     */
-    protected sendError(context: MiddlewareContext, message: string, statusCode: number = 400): void {
-        const response = HttpHandlerUtils.createErrorResponse(message);
-        this.server.sendJSON(context.res as unknown as HttpResponse, response, statusCode);
-    }
-
-    /**
-     * Extract query parameters from request
-     * Uses HttpHandlerUtils for consistent extraction
-     */
-    protected getQueryParams(context: MiddlewareContext): Record<string, string> {
-        return HttpHandlerUtils.extractQueryParams(context.req as unknown as HttpRequest);
-    }
-
-    /**
-     * Extract path parameters from request
-     * Uses HttpHandlerUtils for consistent extraction
-     */
-    protected getPathParams(context: MiddlewareContext, routePattern?: string): Record<string, string> {
-        if (!routePattern) {
-            // Si pas de pattern fourni, retourner un objet vide ou extraire depuis l'URL
-            return {};
-        }
-        const url = context.url || '';
-        return HttpHandlerUtils.extractPathParams(url, routePattern);
-    }
-
-    /**
-     * Validate required fields in request body
-     * Uses HttpHandlerUtils for consistent validation
-     */
-    protected validateRequiredFields(data: Record<string, unknown>, fields: string[]): void {
-        HttpHandlerUtils.validateRequiredFields(data, fields);
-    }
+    
 
     /**
      * Log request with consistent format

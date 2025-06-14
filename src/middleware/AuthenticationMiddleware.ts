@@ -6,36 +6,12 @@
 import { JwtService, JwtPayload } from '../auth/JwtService';
 import { UserRoleService, User } from '../auth/UserRoleService';
 import { AuthenticationErrorHandler, ErrorContext } from '../auth/AuthenticationErrorHandler';
+import { MiddlewareContext, NextFunction } from './MiddlewareContext';
 import { 
-    UWSRequest, 
-    UWSResponse, 
-    RequestData, 
-    RequestBody, 
-    RequestHeaders, 
-    RequestParams, 
-    RequestQuery,
     Logger,
     HttpError,
     AuthenticationOptions
 } from '../types/middleware.types';
-
-export interface MiddlewareContext {
-    req: UWSRequest;
-    res: UWSResponse;
-    user?: User;
-    data?: RequestData;
-    params?: RequestParams;
-    query?: RequestQuery;
-    body?: RequestBody;
-    headers?: RequestHeaders;
-    method?: string;
-    url?: string;
-    requestId?: string;
-}
-
-export interface NextFunction {
-    (): Promise<void>;
-}
 
 export abstract class Middleware {
     abstract execute(context: MiddlewareContext, next: NextFunction): Promise<void>;

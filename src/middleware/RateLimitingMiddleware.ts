@@ -3,7 +3,8 @@
  * Single responsibility: Request rate limiting and throttling
  */
 
-import { Middleware, MiddlewareContext, NextFunction } from './AuthenticationMiddleware';
+import { MiddlewareContext, NextFunction } from './MiddlewareContext';
+import { Middleware } from './AuthenticationMiddleware';
 
 export interface RateLimitOptions {
     /** Maximum number of requests per window */

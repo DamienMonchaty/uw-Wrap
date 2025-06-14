@@ -12,7 +12,7 @@ import { RouteRegistry, RegisteredRoute } from './RouteRegistry';
 import { MiddlewareManager, MiddlewareServices } from './MiddlewareManager';
 import { GuardManager, GuardContext } from './Guards';
 
-import { MiddlewareContext } from '../../middleware/AuthenticationMiddleware';
+import { MiddlewareContext, MiddlewareContextImpl } from '../../middleware/MiddlewareContext';
 
 export interface RouterOptions {
     corsOptions?: any;
@@ -114,33 +114,33 @@ export class Router {
         const { method, fullPath, handlerInstance, handler: handlerMethodName, middlewares } = route;
 
         // Create middleware instances for this route
-        const routeMiddlewares = this.middlewareManager.createMiddlewares(middlewares);
-
-        // Create the route handler
+        const routeMiddlewares = this.middlewareManager.createMiddlewares(middlewares);        // Create the route handler
         const routeHandler = async (response: any, request: any) => {
-            const context: MiddlewareContext & GuardContext = {
-                req: request,
-                res: response,
-                data: {},
+            // Create context using MiddlewareContextImpl
+            const baseContext = new MiddlewareContextImpl(request, response);
+            
+            // Extract request data using utilities
+            const requestId = HttpHandlerUtils.generateRequestId();
+            const clientIP = HttpHandlerUtils.getClientIP(request);
+              // Populate context with request metadata
+            baseContext.method = request.getMethod?.() || 'GET';
+            baseContext.url = request.getUrl?.() || '';
+            baseContext.requestId = requestId;
+            baseContext.routePattern = fullPath; // Store route pattern for path params
+            baseContext.data = {
+                requestId,
+                clientIP,
+                startTime: Date.now()
+            };
+            
+            // Extend with GuardContext properties
+            const context: MiddlewareContext & GuardContext = Object.assign(baseContext, {
                 user: undefined,
                 permissions: undefined,
                 metadata: {}
-            };
+            });
 
             try {
-                // Extract request data using utilities
-                const requestId = HttpHandlerUtils.generateRequestId();
-                const clientIP = HttpHandlerUtils.getClientIP(request);
-                
-                // Initialize data object if needed
-                if (!context.data) {
-                    context.data = {};
-                }
-                
-                // Add request metadata
-                context.data.requestId = requestId;
-                context.data.clientIP = clientIP;
-                context.data.startTime = Date.now();
 
                 // Execute middleware chain
                 const middlewareSuccess = await this.middlewareManager.executeMiddlewareChain(

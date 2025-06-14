@@ -3,7 +3,8 @@
  * Single responsibility: Handle CORS headers and preflight requests
  */
 
-import { Middleware, MiddlewareContext, NextFunction } from './AuthenticationMiddleware';
+import { MiddlewareContext, NextFunction } from './MiddlewareContext';
+import { Middleware } from './AuthenticationMiddleware';
 
 export interface CorsOptions {
     origin?: string | string[] | ((origin: string) => boolean);

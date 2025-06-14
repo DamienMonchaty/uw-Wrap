@@ -4,12 +4,8 @@
  */
 
 import { MiddlewareMetadata } from '../decorators/types';
-import { 
-    Middleware, 
-    MiddlewareContext, 
-    NextFunction,
-    AuthenticationMiddleware 
-} from '../../middleware/AuthenticationMiddleware';
+import { MiddlewareContext, NextFunction } from '../../middleware/MiddlewareContext';
+import { Middleware, AuthenticationMiddleware } from '../../middleware/AuthenticationMiddleware';
 import { CorsMiddleware } from '../../middleware/CorsMiddleware';
 import { ValidationMiddleware } from '../../middleware/ValidationMiddleware';
 import { RateLimitingMiddleware } from '../../middleware/RateLimitingMiddleware';

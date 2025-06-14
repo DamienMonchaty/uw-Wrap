@@ -3,7 +3,8 @@
  * Single responsibility: Request/Response logging
  */
 
-import { Middleware, MiddlewareContext, NextFunction } from './AuthenticationMiddleware';
+import { MiddlewareContext, NextFunction } from './MiddlewareContext';
+import { Middleware } from './AuthenticationMiddleware';
 import { Logger } from '../utils/logger';
 
 export interface LoggingOptions {

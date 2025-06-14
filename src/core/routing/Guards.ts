@@ -3,7 +3,7 @@
  * Following Single Responsibility Principle - only route protection logic
  */
 
-import { MiddlewareContext } from '../../middleware/AuthenticationMiddleware';
+import { MiddlewareContext } from '../../middleware/MiddlewareContext';
 import { Logger } from '../../utils/logger';
 
 export interface GuardContext extends MiddlewareContext {
