@@ -1,13 +1,11 @@
 {
-  "name": "uw-wrap",
+  "name": "blitzjs",
   "version": "1.0.0",
-  "description": "## Overview This project is a Node.js wrapper for `uWebSockets.js`, JWT authentication, and other utilities. It is designed to provide a lightweight and efficient server framework.",
-  "main": "index.js",
+  "description": "Ultra-fast HTTP framework with Elysia-like API built on uWebSockets.js",
+  "main": "dist/src/index.js",
   "scripts": {
-    "start": "ts-node example/server.ts",
-    "start:bun": "bun run example/server.ts",
-    "dev": "scripts\\dev.bat",
-    "dev:unix": "./scripts/dev.sh",
+    "start": "ts-node example/blitz-style.ts",
+    "dev": "ts-node example/blitz-style.ts",
     "build": "tsc",
     "clean": "scripts\\cleanup.bat",
     "clean:unix": "./scripts/cleanup.sh",

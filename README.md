@@ -1,56 +1,123 @@
-# 📚 Documentation uW-Wrap
+# BlitzJS ⚡
 
-Complete documentation for the TypeScript wrapper for uWebSockets.js
+Ultra-fast HTTP framework with Elysia-like API built on uWebSockets.js
 
-## 📋 Table of Contents
+## Features
 
-### 🚀 [Setup & Configuration](./docs/setup/)
-- **[MySQL Configuration](./docs/setup/MYSQL_CONFIG.md)** - Complete MySQL setup and configuration guide
+- ⚡ **Lightning Fast** - Built on uWebSockets.js, one of the fastest HTTP servers
+- 🎯 **Elysia-like API** - Clean, chainable syntax inspired by Elysia
+- 🔧 **TypeScript First** - Full TypeScript support with excellent type inference  
+- 📦 **Zero Dependencies** - Only uWebSockets.js as peer dependency
+- 🚀 **Auto Response** - Automatic JSON/string response handling
 
-### 📖 [Usage Guides](./docs/guides/)
-- **[Wrapper Usage Guide](./docs/guides/WRAPPER_USAGE_GUIDE.md)** - Comprehensive guide for using the wrapper
-- **[Repository Guide](./docs/guides/REPOSITORY_GUIDE.md)** - Repository pattern implementation and API reference
+## Installation
 
-### 🏗️ [Architecture](./docs/architecture/)
-- **[Error Handler Improvements](.v/architecture/ERROR_HANDLER_IMPROVEMENTS.md)** - Error handling system documentation
+```bash
+npm install blitzjs
+```
 
-### 📑 [Reference](./docs/reference/)
-- **[Project Summary](./docs/reference/PROJECT_SUMMARY.md)** - Executive overview of wrapper capabilities and architecture
+## Quick Start
+
+```typescript
+import { BlitzJS } from 'blitzjs';
+
+new BlitzJS()
+  .get('/', 'Hello BlitzJS!')
+  .get('/json', { message: 'Auto JSON response!' })
+  .get('/user/:id', (ctx) => ({ 
+    id: ctx.params.id, 
+    name: `User ${ctx.params.id}` 
+  }))
+  .listen(3000);
+```
+
+## API
+
+### Simple Responses
+
+```typescript
+// String response
+.get('/', 'Hello World!')
+
+// JSON response  
+.get('/data', { key: 'value' })
+
+// Function response
+.get('/time', () => new Date().toISOString())
+
+// Dynamic response
+.get('/user/:id', (ctx) => ({ id: ctx.params.id }))
+```
+
+### HTTP Methods
+
+```typescript
+new BlitzJS()
+  .get('/users', () => getAllUsers())
+  .post('/users', (ctx) => createUser(ctx.body))
+  .put('/users/:id', (ctx) => updateUser(ctx.params.id))
+  .delete('/users/:id', (ctx) => deleteUser(ctx.params.id))
+  .listen(3000);
+```
+
+### Context
+
+Route handlers receive a context object:
+
+```typescript
+interface RouteContext {
+  req: HttpRequest;      // uWebSockets.js request
+  res: HttpResponse;     // uWebSockets.js response  
+  params: Record<string, string>;  // Route parameters
+  query: Record<string, string>;   // Query parameters
+  body?: any;           // Request body (if parsed)
+}
+```
+
+### Middleware
+
+```typescript
+import { BlitzJS } from 'blitzjs';
+
+const app = new BlitzJS()
+  .use(async (ctx, next) => {
+    console.log(`${ctx.req.getMethod()} ${ctx.req.getUrl()}`);
+    await next();
+  })
+  .get('/', 'Hello with middleware!')
+  .listen(3000);
+```
+
+### Factory Function
+
+```typescript
+import { Blitz } from 'blitzjs';
+
+// Use the factory function for a more functional approach
+const app = Blitz()
+  .get('/', 'Hello from factory!')
+  .listen(3000);
+```
+
+## Performance
+
+BlitzJS leverages uWebSockets.js to deliver exceptional performance:
+
+- **High Throughput** - Hundreds of thousands of requests per second
+- **Low Latency** - Minimal response times
+- **Memory Efficient** - Low memory footprint
+- **CPU Efficient** - Optimized for modern JavaScript engines
+
+## Examples
+
+See the `example/` directory:
+
+- `blitz-style.ts` - Complete BlitzJS example with various features
+
+## License
+
+MIT
 
 ---
 
-## 🎯 Quick Start
-
-1. **Installation**: `npm install` or `bun install`
-2. **Configuration**: Copy `.env.example` to `.env` and configure your MySQL connection
-3. **Usage**: Import and use the wrapper components in your project
-
-```typescript
-import { createDatabaseConnection, BaseRepository } from './src';
-
-// Initialize database connection
-const db = createDatabaseConnection({
-  host: 'localhost',
-  user: 'your_user',
-  password: 'your_password',
-  database: 'your_database'
-});
-
-// Use repositories for data access
-const userRepo = new BaseRepository(db, 'users');
-```
-
-## 📚 Key Features
-
-- **Type-safe database operations** with full TypeScript support
-- **Repository pattern** implementation for clean data access
-- **Advanced error handling** with structured error responses
-- **MySQL integration** with connection pooling and optimization
-- **Modular architecture** for easy integration into any project
-
-## 📞 Support
-
-For questions or issues, refer to the appropriate documentation sections above, particularly:
-- Start with the [Wrapper Usage Guide](./guides/WRAPPER_USAGE_GUIDE.md) for basic usage
-- Check [Repository Guide](./guides/REPOSITORY_GUIDE.md) for data access patterns
-- Review [Error Handler Improvements](./architecture/ERROR_HANDLER_IMPROVEMENTS.md) for error handling
+**BlitzJS** - When you need speed ⚡
