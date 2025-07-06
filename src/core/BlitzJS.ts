@@ -31,10 +31,15 @@ interface Route {
   handler: RouteHandlerFunction;
   regex: RegExp;
   paramNames: string[];
+  // Code Generation Runtime
+  compiledHandler?: Function;
+  isStatic?: boolean;
+  originalHandler?: SimpleHandler | RouteHandlerFunction;
 }
 
 /**
  * BlitzJS - Ultra-lightweight, Elysia-like web framework
+ * Avec génération de code à l'exécution par défaut pour des performances maximales
  */
 export class BlitzJS {
   private app: TemplatedApp;
@@ -42,6 +47,11 @@ export class BlitzJS {
   private middlewares: MiddlewareFunction[] = [];
   private config: BlitzConfig;
   private prefix: string;
+  
+  // Code Generation Runtime (activé par défaut)
+  private codeGenEnabled: boolean = true;
+  private compiledRouteMap: Map<string, Function> = new Map();
+  private routeCompileCount: number = 0;
 
   constructor(config: BlitzConfig = {}) {
     this.config = {
@@ -87,7 +97,7 @@ export class BlitzJS {
     // Add sub-app's routes with prefix
     for (const route of subApp.routes) {
       const prefixedPattern = this.combinePaths(subApp.prefix, route.pattern);
-      this.addRoute(route.method, prefixedPattern, route.handler);
+      this.addRoute(route.method, prefixedPattern, route.handler, route.originalHandler);
     }
   }
 
@@ -111,8 +121,7 @@ export class BlitzJS {
    * Handle GET requests with Elysia-like simplicity
    */
   get(pattern: string, handler: SimpleHandler): this {
-    // For sub-apps, store the pattern as-is (without prefix)
-    this.addRoute('get', pattern, this.createSimpleHandler(handler));
+    this.addRoute('get', pattern, this.createSimpleHandler(handler), handler);
     return this;
   }
 
@@ -120,7 +129,7 @@ export class BlitzJS {
    * Handle POST requests with Elysia-like simplicity
    */
   post(pattern: string, handler: SimpleHandler): this {
-    this.addRoute('post', pattern, this.createSimpleHandler(handler));
+    this.addRoute('post', pattern, this.createSimpleHandler(handler), handler);
     return this;
   }
 
@@ -128,7 +137,7 @@ export class BlitzJS {
    * Handle PUT requests with Elysia-like simplicity
    */
   put(pattern: string, handler: SimpleHandler): this {
-    this.addRoute('put', pattern, this.createSimpleHandler(handler));
+    this.addRoute('put', pattern, this.createSimpleHandler(handler), handler);
     return this;
   }
 
@@ -136,7 +145,7 @@ export class BlitzJS {
    * Handle DELETE requests with Elysia-like simplicity
    */
   delete(pattern: string, handler: SimpleHandler): this {
-    this.addRoute('delete', pattern, this.createSimpleHandler(handler));
+    this.addRoute('delete', pattern, this.createSimpleHandler(handler), handler);
     return this;
   }
 
@@ -144,7 +153,7 @@ export class BlitzJS {
    * Handle PATCH requests with Elysia-like simplicity
    */
   patch(pattern: string, handler: SimpleHandler): this {
-    this.addRoute('patch', pattern, this.createSimpleHandler(handler));
+    this.addRoute('patch', pattern, this.createSimpleHandler(handler), handler);
     return this;
   }
 
@@ -152,7 +161,7 @@ export class BlitzJS {
    * Handle OPTIONS requests with Elysia-like simplicity
    */
   options(pattern: string, handler: SimpleHandler): this {
-    this.addRoute('options', pattern, this.createSimpleHandler(handler));
+    this.addRoute('options', pattern, this.createSimpleHandler(handler), handler);
     return this;
   }
 
@@ -160,7 +169,7 @@ export class BlitzJS {
    * Handle HEAD requests with Elysia-like simplicity
    */
   head(pattern: string, handler: SimpleHandler): this {
-    this.addRoute('head', pattern, this.createSimpleHandler(handler));
+    this.addRoute('head', pattern, this.createSimpleHandler(handler), handler);
     return this;
   }
 
@@ -177,7 +186,22 @@ export class BlitzJS {
     
     this.app.listen(this.config.host!, serverPort, (token) => {
       if (token) {
+        // 🚀 Afficher les statistiques de performance de la génération de code
+        const staticRoutes = this.routes.filter(r => r.isStatic).length;
+        const dynamicRoutes = this.routes.filter(r => !r.isStatic).length;
+        const compiledRoutes = this.routes.filter(r => r.compiledHandler).length;
+        
         console.log(`🚀 BlitzJS running on http://${this.config.host}:${serverPort}`);
+        
+        if (this.codeGenEnabled) {
+          console.log(`⚡ Runtime Code Generation: ENABLED`);
+          console.log(`📊 Compiled handlers: ${compiledRoutes}/${this.routes.length} routes`);
+          console.log(`🏃 Static routes: ${staticRoutes} (ultra-fast)`);
+          console.log(`🔄 Dynamic routes: ${dynamicRoutes} (optimized)`);
+        } else {
+          console.log(`⚡ Runtime Code Generation: DISABLED`);
+        }
+        
         if (callback) callback(token);
       } else {
         console.error(`❌ Failed to listen on port ${serverPort}`);
@@ -195,18 +219,29 @@ export class BlitzJS {
   }
 
   /**
-   * Add a route to the handler
+   * Add a route to the handler avec génération de code automatique 🚀
    */
-  private addRoute(method: HttpMethod, pattern: string, handler: RouteHandlerFunction): void {
+  private addRoute(method: HttpMethod, pattern: string, handler: RouteHandlerFunction, originalHandler?: SimpleHandler | RouteHandlerFunction): void {
     const { regex, paramNames } = this.compilePattern(pattern);
+    const isStatic = paramNames.length === 0;
     
-    this.routes.push({
+    // Créer la route avec les informations pour la génération de code
+    const route: Route = {
       method,
       pattern,
       handler,
       regex,
-      paramNames
-    });
+      paramNames,
+      isStatic,
+      originalHandler: originalHandler || handler
+    };
+
+    // 🚀 RUNTIME CODE GENERATION - Compiler le handler immédiatement si activé
+    if (this.codeGenEnabled && !this.prefix) {
+      route.compiledHandler = this.compileHandler(route);
+    }
+    
+    this.routes.push(route);
   }
 
   /**
@@ -240,7 +275,20 @@ export class BlitzJS {
     // Execute middleware chain and route handler
     await this.executeMiddlewares(context, async () => {
       try {
-        await route.handler(context);
+        // 🚀 RUNTIME CODE GENERATION - Utiliser le handler compilé si disponible
+        if (route.compiledHandler && this.codeGenEnabled) {
+          // Handler compilé ultra-rapide
+          if (route.isStatic) {
+            // Route statique - pas de paramètres à extraire
+            await route.compiledHandler(req, res, url);
+          } else {
+            // Route dynamique - paramètres déjà extraits
+            await route.compiledHandler(req, res, url, params);
+          }
+        } else {
+          // Fallback vers le handler original
+          await route.handler(context);
+        }
       } catch (error) {
         console.error('Route handler error:', error);
         if (!res.aborted) {
@@ -441,6 +489,160 @@ export class BlitzJS {
       ctx.res.writeHeader('Content-Type', 'application/json');
       ctx.res.end(JSON.stringify({ error: 'Invalid handler' }));
     };
+  }
+
+  /**
+   * 🚀 RUNTIME CODE GENERATION - Génère des handlers optimisés à la volée
+   */
+  private compileHandler(route: Route): Function {
+    const { pattern, paramNames, originalHandler } = route;
+    const routeKey = `${route.method}_${pattern}`;
+    
+    // Vérifier si déjà compilé
+    if (this.compiledRouteMap.has(routeKey)) {
+      return this.compiledRouteMap.get(routeKey)!;
+    }
+
+    let compiledHandler: Function;
+
+    // ⚡ Optimisation spéciale pour les réponses string simples
+    if (typeof originalHandler === 'string') {
+      compiledHandler = this.compileStringHandler(originalHandler);
+      console.log(`⚡ Compiled string handler: ${route.method.toUpperCase()} ${pattern}`);
+    }
+    // ⚡ Optimisation pour les réponses JSON simples  
+    else if (typeof originalHandler === 'object' && originalHandler !== null) {
+      compiledHandler = this.compileJSONHandler(originalHandler);
+      console.log(`⚡ Compiled JSON handler: ${route.method.toUpperCase()} ${pattern}`);
+    }
+    // ⚡ Optimisation pour les handlers de fonction simples
+    else if (typeof originalHandler === 'function') {
+      compiledHandler = this.compileFunctionHandler(originalHandler, paramNames);
+      console.log(`⚡ Compiled function handler: ${route.method.toUpperCase()} ${pattern}`);
+    }
+    // ⚡ Fallback pour les cas complexes
+    else {
+      compiledHandler = route.handler; // Utilise le handler original
+      console.log(`⚠️  Using original handler: ${route.method.toUpperCase()} ${pattern}`);
+    }
+
+    // Mettre en cache
+    this.compiledRouteMap.set(routeKey, compiledHandler);
+    this.routeCompileCount++;
+    
+    return compiledHandler;
+  }
+
+  /**
+   * Compile un handler pour réponse string - Ultra rapide
+   */
+  private compileStringHandler(responseString: string): Function {
+    return function compiledStringResponse(req: any, res: any) {
+      try {
+        if (!res.aborted) {
+          res.writeHeader('Content-Type', 'text/plain; charset=utf-8');
+          res.end(responseString);
+        }
+      } catch (error) {
+        console.error('String handler error:', error);
+        if (!res.aborted) {
+          res.writeStatus('500 Internal Server Error');
+          res.end('Internal Server Error');
+        }
+      }
+    };
+  }
+
+  /**
+   * Compile un handler pour réponse JSON - Ultra rapide
+   */
+  private compileJSONHandler(responseObject: unknown): Function {
+    const serializedJSON = JSON.stringify(responseObject);
+    return function compiledJSONResponse(req: any, res: any) {
+      try {
+        if (!res.aborted) {
+          res.writeHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(serializedJSON);
+        }
+      } catch (error) {
+        console.error('JSON handler error:', error);
+        if (!res.aborted) {
+          res.writeStatus('500 Internal Server Error');
+          res.end('{"error":"Internal Server Error"}');
+        }
+      }
+    };
+  }
+
+  /**
+   * Compile un handler de fonction avec extraction optimisée des paramètres
+   */
+  private compileFunctionHandler(handlerFn: Function, paramNames: string[]): Function {
+    const hasParams = paramNames.length > 0;
+    
+    if (!hasParams) {
+      // Route statique - pas besoin d'extraction de paramètres
+      return async function compiledStaticHandler(req: any, res: any, url: string) {
+        try {
+          const ctx = {
+            req,
+            res,
+            params: {},
+            query: {},
+            body: undefined
+          };
+          
+          const result = await handlerFn(ctx);
+          
+          if (result !== undefined && !res.aborted) {
+            if (typeof result === 'string' || typeof result === 'number' || typeof result === 'boolean' || result === null) {
+              res.writeHeader('Content-Type', 'text/plain; charset=utf-8');
+              res.end(String(result));
+            } else {
+              res.writeHeader('Content-Type', 'application/json; charset=utf-8');
+              res.end(JSON.stringify(result));
+            }
+          }
+        } catch (error) {
+          console.error('Static handler error:', error);
+          if (!res.aborted) {
+            res.writeStatus('500 Internal Server Error');
+            res.end('Internal Server Error');
+          }
+        }
+      };
+    } else {
+      // Route dynamique - extraction de paramètres optimisée
+      return async function compiledDynamicHandler(req: any, res: any, url: string, extractedParams: Record<string, string>) {
+        try {
+          const ctx = {
+            req,
+            res,
+            params: extractedParams,
+            query: {},
+            body: undefined
+          };
+          
+          const result = await handlerFn(ctx);
+          
+          if (result !== undefined && !res.aborted) {
+            if (typeof result === 'string' || typeof result === 'number' || typeof result === 'boolean' || result === null) {
+              res.writeHeader('Content-Type', 'text/plain; charset=utf-8');
+              res.end(String(result));
+            } else {
+              res.writeHeader('Content-Type', 'application/json; charset=utf-8');
+              res.end(JSON.stringify(result));
+            }
+          }
+        } catch (error) {
+          console.error('Dynamic handler error:', error);
+          if (!res.aborted) {
+            res.writeStatus('500 Internal Server Error');
+            res.end('Internal Server Error');
+          }
+        }
+      };
+    }
   }
 
   /**
