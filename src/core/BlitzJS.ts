@@ -22,6 +22,7 @@ export interface BlitzConfig {
   port?: number;
   host?: string;
   ssl?: AppOptions;
+  prefix?: string; // Nouveau: support des préfixes
 }
 
 interface Route {
@@ -40,6 +41,7 @@ export class BlitzJS {
   private routes: Route[] = [];
   private middlewares: MiddlewareFunction[] = [];
   private config: BlitzConfig;
+  private prefix: string;
 
   constructor(config: BlitzConfig = {}) {
     this.config = {
@@ -48,24 +50,68 @@ export class BlitzJS {
       ...config
     };
     
-    // Initialize uWebSockets.js app
-    this.app = config.ssl ? SSLApp(config.ssl) : App();
+    this.prefix = config.prefix || '';
     
-    this.setupRoutes();
+    // Initialize uWebSockets.js app only if this is not a sub-app
+    if (!config.prefix) {
+      this.app = config.ssl ? SSLApp(config.ssl) : App();
+      this.setupRoutes();
+    } else {
+      this.app = null as any; // Sub-app doesn't have its own uWS app
+    }
   }
 
   /**
    * Add middleware to the application
    */
-  use(middleware: MiddlewareFunction): this {
-    this.middlewares.push(middleware);
+  use(middleware: MiddlewareFunction | BlitzJS): this {
+    if (middleware instanceof BlitzJS) {
+      // Mount a sub-application
+      this.mountSubApp(middleware);
+    } else {
+      // Add regular middleware
+      this.middlewares.push(middleware);
+    }
     return this;
+  }
+
+  /**
+   * Mount a sub-application with its routes and middlewares
+   */
+  private mountSubApp(subApp: BlitzJS): void {
+    // Add sub-app's middlewares with prefix
+    for (const middleware of subApp.middlewares) {
+      this.middlewares.push(middleware);
+    }
+    
+    // Add sub-app's routes with prefix
+    for (const route of subApp.routes) {
+      const prefixedPattern = this.combinePaths(subApp.prefix, route.pattern);
+      this.addRoute(route.method, prefixedPattern, route.handler);
+    }
+  }
+
+  /**
+   * Combine paths properly handling slashes
+   */
+  private combinePaths(prefix: string, path: string): string {
+    if (!prefix) return path;
+    
+    // Ensure prefix starts with / and doesn't end with /
+    const cleanPrefix = prefix.startsWith('/') ? prefix : '/' + prefix;
+    const normalizedPrefix = cleanPrefix.endsWith('/') ? cleanPrefix.slice(0, -1) : cleanPrefix;
+    
+    // Ensure path starts with /
+    const cleanPath = path.startsWith('/') ? path : '/' + path;
+    
+    return normalizedPrefix + cleanPath;
   }
 
   /**
    * Handle GET requests with Elysia-like simplicity
    */
   get(pattern: string, handler: SimpleHandler): this {
+    // For sub-apps, store the pattern as-is (without prefix)
     this.addRoute('get', pattern, this.createSimpleHandler(handler));
     return this;
   }
@@ -120,8 +166,13 @@ export class BlitzJS {
 
   /**
    * Start server and return this for method chaining
+   * Only works on main app (not sub-apps with prefix)
    */
   listen(port?: number, callback?: (token: false | object) => void): this {
+    if (this.prefix) {
+      throw new Error('Cannot call listen() on a sub-app with prefix. Use listen() on the main app.');
+    }
+    
     const serverPort = port || this.config.port!;
     
     this.app.listen(this.config.host!, serverPort, (token) => {
@@ -279,14 +330,14 @@ export class BlitzJS {
   private compilePattern(pattern: string): { regex: RegExp; paramNames: string[] } {
     const paramNames: string[] = [];
     
-    // Convert Express-style parameters (:param) to regex groups
-    const regexPattern = pattern
-      .replace(/\//g, '\\/')
+    // First extract parameters, then escape slashes
+    let regexPattern = pattern
       .replace(/:([^/]+)/g, (match, paramName) => {
         paramNames.push(paramName);
         return '([^/]+)';
       })
-      .replace(/\*/g, '.*');
+      .replace(/\*/g, '.*')
+      .replace(/\//g, '\\/');  // Escape slashes AFTER processing params
     
     const regex = new RegExp(`^${regexPattern}$`);
     
